@@ -78,7 +78,7 @@ the case from the default uppercase to lowercase (like pressing the CapsLock
 key). This also changes back to the primary character table (A-Z). To change
 back to uppercase you do the same thing: 0, 0, 25.
 
-# Message spans the length of several keys?
+## Message spans the length of several keys?
 
 The 26th position in the alternate character table instructs the decryptor that
 the next 5 numbers (letters) is a key identifier. The new key is to be used to
@@ -135,7 +135,13 @@ preferably you would want 5 square dice. If you throw that dice 5 times (or all
 smallest number we can generate is now 1. The largest number we can generate is
 `6*5 = 30`, but we still need to subtract 4 which means the largest number is
 now 26. Perfect! This is a simple way to generate a key if you - for some
-reason - can not use electronics or the tools provided in this repository.
+reason - can not use electronics or the tools provided in this repository. Or,
+you have run out of pre-generated pre-distributed keys and - since it's the
+apocalypse - you can for some reason not access or use a computer. Well, if
+your trasceiver works chances are that someone's laptop does aswell, but maybe
+you do not have the electricity needed and since your transceiver is designed
+for 12 volts, it is easy to connect to the generator in the nearest car. A QRP
+radio may also work fine on AA batteries which your laptop definitely does not.
 
 ## 431
 
