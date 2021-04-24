@@ -237,6 +237,10 @@ electricity needed and since your transceiver is designed for 12 volts, it is
 easy to connect to the generator in the nearest car. A QRP radio may also work
 fine on AA batteries which your laptop definitely does not.
 
+## Links
+
+<https://youtu.be/cpqwp2H0SNo>
+
 ## 431
 
 ```
