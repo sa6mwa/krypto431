@@ -105,12 +105,18 @@ message.
 
 ```
 ABCDEFGHIJKLMNOPQRSTUVWXYZ
+Q = Space
+Z = Change to alternate character table
 ```
 
 ## Alternate character table
 
 ```
-1234567890!()+,-./=?@ÅÄÖ[cl][change-to-key-that-follows]
+0123456789!+,-./=?Z@ ÅÄÖX[cl][change-to-key-that-follows]
+
+0123456789ÅÄÖÆØ.Q?Z+/=,[cl][change-key][change-table]
+ABCDEFGHIJKLMNOPQRSTUVWX   Y           Z
+Z = Change to primary character table
 
 When in the primary character table you decipher the following...
 0, 0, 26
@@ -125,6 +131,92 @@ to switch back to the primary character table (no need to add two zeroes as you
 would do otherwise to switch back from the alternate to the primary character
 table).
 ```
+
+## Caveats - logic needed
+
+```
+ENCRYPTION
+
+ plaintext: XYZ ABC = 24, 25, 26, 0, 1, 2, 3
+       key: ZZZZZZZ = 26, 26, 26, 26, 26, 26, 26
+       sum:           50, 51, 52, 26, 27, 28, 29
+modulo26+1: YZAABCD = 25, 26, 1, 1, 2, 3, 4
+
+DECRYPTION
+
+ciphertext: YZAABCD = 25, 26, 1, 1, 2, 3, 4
+       key: ZZZZZZZ = 26, 26, 26, 26, 26, 26, 26
+  subtract:           -1, 0, -25, -25, -24, -23, -22
+modulo26-1: XY  ABC
+deciphered: XY  ABC
+
+
+SOLUTION
+
+ENCRYPTION
+
+ plaintext: XYZ ABC = 24, 25, 26, 0, 1, 2, 3
+       key: ZZZZZZZ = 26, 26, 26, 26, 26, 26, 26
+       sum:           50, 51, 52, 26, 27, 28, 29
+modulo26+1: YZAABCD = 25, 26, 1, 1, 2, 3, 4
+
+ABC DEF
+ABCZZDEF
+
+
+NEW IDEA = TRUE MODULO 26, 0 to 25
+
+rule = Z is only to switch between tables, can not be used in either table.
+
+Z = change table
+ZS = Z (Z is position S in the 2nd character table)
+ZRZ = change table, R = space (room), change back to A-Z table
+Padding to fill out 5 letter group = Z (change front to back between character tables)
+
+Zoo = ZSZOO
+Marxzell = MARXZSZELL
+Zebra = ZSZEBRA
+
+Z123 HELLO = ZSBCDRZHELLO = Z123 HELLO
+
+This is a secret text. How are you doing? Take care, bye.
+With ZRZ as "room" character:
+THISZ RZISZ RZAZR ZSECR ETZRZ TEXTZ PRZHO WZRZA REZRZ YOUZR ZDOIN GZQRZ TAKEZ RZCAR EZWZB YEZPZ
+With Q as space/room:
+THISQ ISQAQ SECRE TQTEX TZPZQ HOWQA REQYO UQDOI NGZQZ QTAKE QCARE ZWZQB YEZPZ
+Queens, cobras and zebras.
+ZQZUE ENSZW ZQCOB RASQA NDQZS ZEBRA SZPZZ
+
+UPK31 = UPKZD BZZZZ
+
+UTGÅ MOT UPK79 = UTGZK ZQMOT QUPKZ HJZZZ
+
+
+
+
+
+zoo = ZZZOO
+Zebra = ZZZEBRA
+
+Marxzell = MARXXZELL (nope, see above)
+Marxzell = MARXZXXZELL
+
+This is a secret message. 123. 73
+THISXISXAXSECRETXMESSAGEXZQXZXXZBCDQXZXXZHD
+
+
+
+
+
+
+
+
+
+
+
+```
+
+
 
 ## Manually generating a key with dice
 
