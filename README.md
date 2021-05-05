@@ -237,7 +237,24 @@ electricity needed and since your transceiver is designed for 12 volts, it is
 easy to connect to the generator in the nearest car. A QRP radio may also work
 fine on AA batteries which your laptop definitely does not.
 
+## Randomness
+
+Krypto431 will use `crypto/rand` in the Golang implementation which in turn
+prefer `getrandom(2)` on Linux systems or `/dev/urandom` as a fallback. We can
+safely use `/dev/urandom` as it uses the exact same CSPRNG (Cryptographically
+Secure Pseudo Random Number Generator) as `/dev/random`. Entropy is not an
+issue if you have enough to start with (256 bits) and this program will not run
+at boot at the exact same time as a virtual machine that uses the exact same
+seed on every boot. So the issue with using `/dev/urandom` does not exist. By
+using `crypto/rand` on a Linux system above 3.17 (or something) we use
+`getrandom(2)` which will block until enough initial entropy has been gathered
+and will never block again - exactly what we want.
+
+Reference: <https://www.2uo.de/myths-about-urandom/>
+
 ## Links
+
+
 
 <https://youtu.be/cpqwp2H0SNo>
 
