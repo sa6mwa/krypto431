@@ -205,15 +205,6 @@ This is a secret message. 123. 73
 THISXISXAXSECRETXMESSAGEXZQXZXXZBCDQXZXXZHD
 
 
-
-
-
-
-
-
-
-
-
 ```
 
 
@@ -252,9 +243,15 @@ and will never block again - exactly what we want.
 
 Reference: <https://www.2uo.de/myths-about-urandom/>
 
-## Links
+## Encrypted sqlite3
 
+There are a few options in Go...
 
+* <https://github.com/mutecomm/go-sqlcipher>
+* <https://github.com/CovenantSQL/go-sqlite3-encrypt>
+* <https://github.com/xeodou/go-sqlcipher>
+
+## Other links
 
 <https://youtu.be/cpqwp2H0SNo>
 
