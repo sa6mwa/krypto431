@@ -39,6 +39,7 @@ func (k *Key) Wipe() {
 	for i := 0; i < len(k); i++ {
 		k.Bytes[i] = 0
 	}
+	k.Bytes = nil
 }
 
 // Result is returned for keys, encoded/decoded plaintext, encrypted ciphertext
@@ -52,8 +53,9 @@ type Result struct {
 }
 
 // Result.Wipe() overwrites the underlying keys, plaintext and ciphertext with
-// zeroes. The order is highest priority first (keys) followed by the
-// plaintext and finally the ciphertext.
+// zeroes. The order is highest priority first (keys) followed by the plaintext
+// and finally the ciphertext. Nilling the byte slices should promote it for
+// garbage collection.
 func (r *Result) Wipe() {
 	for i := range r.Keys {
 		r.Keys[i].Wipe()
@@ -61,9 +63,11 @@ func (r *Result) Wipe() {
 	for i := 0; i < len(r.PlainText); i++ {
 		r.PlainText[i] = 0
 	}
+	r.PlainText = nil
 	for i := 0; i < len(r.CipherText); i++ {
 		r.CipherText[i] = 0
 	}
+	r.CipherText = nil
 }
 
 func New(opts ...Option) Krypto431 {
