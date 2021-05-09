@@ -211,22 +211,15 @@ THISXISXAXSECRETXMESSAGEXZQXZXXZBCDQXZXXZHD
 
 ## Manually generating a key with dice
 
-You need at least one square dice able to generate a number from 1 to 6,
-preferably you would want 5 square dice. If you throw that dice 5 times (or all
-5 dice once) and add all the numbers, the smallest number you can generate is
-5. We want to generate numbers from 1 to 26. If we subtract 4 from the sum the
-smallest number we can generate is now 1. The largest number we can generate is
-`6*5 = 30`, but we still need to subtract 4 which means the largest number is
-now 26. Perfect!
+The previous method described here had the flaw of bias towards some numbers
+while others do not appear as frequent resulting in a poor quality key -
+thankfully pointed out by SA4AMX.
 
-This is a simple way to generate a key if you - for some reason - can not use
-electronics or the tools provided in this repository. Or, you have run out of
-pre-generated pre-distributed keys and - since it's the apocalypse - you can
-for some reason not access or use a computer. Well, if your trasceiver works
-chances are that someone's laptop does aswell, but maybe you do not have the
-electricity needed and since your transceiver is designed for 12 volts, it is
-easy to connect to the generator in the nearest car. A QRP radio may also work
-fine on AA batteries which your laptop definitely does not.
+One possible solution was found
+[here](https://medium.com/swlh/simulating-a-seven-sided-die-with-a-six-sided-one-28f73afc1702),
+but it needs to be described dumb-simple for numbers 0 to 25.
+[Here](https://medium.com/swlh/roll-your-own-random-number-generator-176bcd860363)
+Thomas Langkaas explains some more.
 
 ## Randomness
 
@@ -250,6 +243,64 @@ There are a few options in Go...
 * <https://github.com/mutecomm/go-sqlcipher>
 * <https://github.com/CovenantSQL/go-sqlite3-encrypt>
 * <https://github.com/xeodou/go-sqlcipher>
+
+## Secure key generation
+
+Links to things related to cryptographically secure PRNG/RNG and 
+
+* Implement Lemire's debiased integer multiplication method? <https://www.pcg-random.org/posts/bounded-rands.html>
+* LICENSE ISSUE (GPL-3.0): Pure Go implementation of Mersenne Twister PRNG <https://pkg.go.dev/github.com/seehuhn/mt19937>
+* MIT License MT19937 version: <https://github.com/spiegel-im-spiegel/mt> 
+
+The Go `math/rand` PRNG is said to be from Plan9's rand(2) implementation and
+is an **Additive Lagged Fibonacci Generator (ALFG)** which is not considered
+secure by todays standards.
+<https://en.wikipedia.org/wiki/Lagged_Fibonacci_generator>.
+
+```
+It's an Additive Lagged Fibonacci Generator (ALFG)
+described by S_n ≡ S_(n-273) + S_(n-607) mod 2^31.
+It's the same code used in Plan 9's rand(2).
+```
+[Source](https://grokbase.com/t/gg/golang-nuts/137fejwsem/go-nuts-math-rand-package-underlying-algorithm#20130715lfzbivfzx6567dx7vz3babsvvu)
+
+Using [Stefan Nilsson's approach](https://yourbasic.org/golang/crypto-rand-int/) by initiating a new source (not NewSource, but New(source)) makes it possible to use `math/rand` with an external pseudo random number generator (for example `crypto/rand` which is cryptographically secure).
+
+```go
+// A Source represents a source of uniformly-distributed
+// pseudo-random int64 values in the range [0, 1<<63).
+type Source interface {
+	Int63() int64
+	Seed(seed int64)
+}
+
+// A Source64 is a Source that can also generate
+// uniformly-distributed pseudo-random uint64 values in
+// the range [0, 1<<64) directly.
+// If a Rand r's underlying Source s implements Source64,
+// then r.Uint64 returns the result of one call to s.Uint64
+// instead of making two calls to s.Int63.
+type Source64 interface {
+	Source
+	Uint64() uint64
+}
+
+/* ... */
+
+// New returns a new Rand that uses random values from src
+// to generate other random values.
+func New(src Source) *Rand {
+	s64, _ := src.(Source64)
+	return &Rand{src: src, s64: s64}
+}
+```
+
+So we need at least `Int63()` and `Seed()`. Usually we can get a Uint64 and
+mask off a bit to get the `Int63()`, which is what Stefan
+Nilsson's implementation does.
+
+The `Seed()` function can be completely empty in this case as it's already
+seeded by the operating system through `crypto/rand`.
 
 ## Other links
 
