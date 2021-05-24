@@ -43,48 +43,60 @@ const (
 	SectionHeader = Section('H')
 )
 
-/*
-Med codec kan man skapa meddelanden.
-Meddelanden har en header (som kan vara tom)
-Meroende på vilka inställningar man har på meddelanden så skickas det med
-olika encodning
-
-*/
-
+// Predefined standard headers
 const (
 	// HeaderFilename, Filename of the data, if applicable:
-	// Use bin mode to encode in UTF-8
+	// Use hex mode to encode in UTF-8
 	HeaderFilename = "FN"
 	// HeaderContentLength, length of the data/message in bytes before encoding
 	HeaderContentLength = "CL"
-	// HeaderContentType, dat type of the data, usually a mime type.
+	// HeaderContentType, data type of the data, usually a mime type, but can
+	// also be a short file extension (JPG/TXT/etc).
 	// Defaults to application/octet-stream (generic 8 bit data) if missing
 	HeaderContentType = "CT"
+	// HeaderContentEncoding defines any special encoding scheme used.
+	// For example gzip
+	HeaderContentEncoding = "CE"
+	// HeaderTimestamp is a timestamp at which the message was orginated
+	// Format is ISO 8601. Example: 2021-05-24T13:43:20Z
+	// The time part can be excluded if needed
+	HeaderTimestamp = "TS"
+	// HeaderTimeNr is a simplified timestamp at which the message was orginated
+	// Format is NNHHMM[Z] where NN is the day, HH is hour and MM is minute,
+	// Z is an optional time zone code
+	// If the time number is in the switch between daylight savings, use odd
+	// numbers for the first hour and even numbers for the second time the
+	// same hours occurres
+	HeaderTimeNr = "TNR"
+	// HeaderDateTimeGroup is a simplified timestamp at witch the message was orginated.
+	// Format is DD HHMMZ MON YY
+	// Example 1: 09 1630Z JUL 11 represents (Jul) 09 16:30 Jul 2011 (UTC).
+	// Example 2: 22 0301Z May 21 represents (May) 22 03:01, May 2021 (UTC).
+	HeaderDateTimeGroup = "DTG"
+	// HeaderTo is a comma separated list of recipients (who should receive the message)
+	HeaderTo = "TO"
+	// HeaderFrom is a comma separated list of senders (who sent the message)
+	HeaderFrom = "DE"
+	// HeaderCc is a comma separated list of carbon copy recipients
+	HeaderCc = "CC"
+	// HeaderBcc is a comma separated list of blind carbon copy recipients
+	HeaderBcc = "BCC"
+	// HeaderPart defines that this message is part P of N parts.
+	// Format is: P,N
+	HeaderPart = "PART"
+	// HeaderLanguage identifies the language used in this message
+	// By convention use the english language name
+	HeaderLanguage = "LANG"
 )
 
-// Format of a data block
-// The transmission starts with a DataModeCh (TableB shifted F)
-// The transmission is divided into two or three parts. The header and the
-// binary data and an optional check value at the end.
-// The header is defined as a list of DataField and text pairs separated by a
-// space (Table A un-shifted Q)
-// Example data field:
-// ZXFXZ FQIMA GEZPZ JPGQT QIMAG EZXUX ZJPEG QCQCR CZDCW AAAAA AAAAA ...
-// ZXFXZ = alt, shift (Table B shifted), F = data mode, shift, alt (Table A)
-// FQIMA = F IMA
-// GEZPZ = GE.
-// JPGQT = JPG T
-// QIMAG =  IMAG
-// EZXUX = E/
-// ZJPEG = JPEG
-// QCQCR =  C CR
-// CZDCW = C32 (W = bin mode)
-// AAAAA = 00
-// AAAAA = 000
-// ...
-// WBACD = 1023 (W = end of bin mode)
-// EFGHI = 45678
-// Written out: |F IMAGE.JPG T IMAGE/JPEG C CRC32|[BINDATA]|102345678
+/*
+* How to transfer generic data
+* To create a data transfer start your message with a header that defines the
+* content type (CT). The content type can be either a file extension (without
+* the dot) or a well known mime type.
+* Then send the data in hex mode.
+* Optionally it is also recommended to add a CRC32 checksum to the message
+ */
 
 func validate(msg []byte) error {
 	for i, b := range msg {
