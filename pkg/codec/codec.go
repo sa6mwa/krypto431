@@ -13,21 +13,21 @@ const CharTableBL = `__________åäöæø:q!z"/%____`
 const DummyCh = '_'
 
 const (
-	SectionSelectCh     = 'A' // Table B shifted              - Section selector
-	BellCh              = 'B' // Table B shifted              - Audible signal
-	TabCh               = 'C' // Table B shifted              - Tab (8 spaces)
-	CheckerModeCh       = 'D' // Table B shifted              - Hash/CRC mode
-	EndOfMessageCh      = 'E' // Table B shifted              - End of message
-	EndOfTransmissionCh = 'F' // Table B shifted              - End of transmission
+	SectionSelectCh     = 'A' // Table B shifted - Section selector
+	BellCh              = 'B' // Table B shifted - Audible signal
+	TabCh               = 'C' // Table B shifted - Tab (8 spaces)
+	CheckerModeCh       = 'D' // Table B shifted - Hash/CRC mode
+	EndOfMessageCh      = 'E' // Table B shifted - End of message
+	EndOfTransmissionCh = 'F' // Table B shifted - End of transmission
 	Reserved1Ch         = 'G' // Table B shifted
 	Reserved2Ch         = 'H' // Table B shifted
 	Reserved3Ch         = 'I' // Table B shifted
 	Reserved4Ch         = 'J' // Table B shifted
-	NewLineCh           = 'Q' // Table A shifted              - \n
-	HexModeCh           = 'W' // Table B shifted & un-shifted - HEX mode
-	ShiftModeCh         = 'X' // Table B shifted & un-shifted - Shift switch
-	KeyModeCh           = 'Y' // Table B shifted & un-shifted - Key name mode
-	SwitchTableCh       = 'Z' // Table A/B                    - Table switch
+	NewLineCh           = 'Q' // Table A shifted - \n
+	HexModeCh           = 'W' // Table B shifted / un-shifted - HEX mode
+	ShiftModeCh         = 'X' // Table B shifted / un-shifted - Shift switch
+	KeyModeCh           = 'Y' // Table B shifted / un-shifted - Key name mode
+	SwitchTableCh       = 'Z' // Table A/B shifted / un-sifted - Table switch
 )
 
 type Section byte
