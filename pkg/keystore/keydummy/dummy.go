@@ -7,7 +7,6 @@ import (
 )
 
 type KeyDummy struct {
-	io.Reader
 }
 
 func New() *KeyDummy {

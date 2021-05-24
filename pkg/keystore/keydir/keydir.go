@@ -14,7 +14,6 @@ import (
 )
 
 type KeyDir struct {
-	io.Reader
 	dir     string
 	keys    []*Key
 	openKey *Key

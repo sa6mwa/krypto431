@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/sa6mwa/krypto431/pkg/kenc"
-	"github.com/sa6mwa/krypto431/pkg/keystore/keydir"
+	"github.com/sa6mwa/krypto431/pkg/keystore/testkeystore"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -36,7 +36,7 @@ var sampleJSON = `
 
 func TestEncoder(t *testing.T) {
 	buf := bytes.NewBuffer(nil)
-	store := keydir.New("C:\\dev\\kryptotest\\keys_enc")
+	store := testkeystore.New()
 	err := store.Open()
 	assert.NoError(t, err)
 	defer func() {
