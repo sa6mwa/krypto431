@@ -13,11 +13,6 @@ const CharTableBL = `__________åäöæø:q!z"/%____`
 const DummyCh = '_'
 
 const (
-	NewLineCh           = 'Q' // Table A shifted              - \n
-	BinModeCh           = 'W' // Table B                      - HEX mode
-	ShiftModeCh         = 'X' // Table B shifted & un-shifted - Shift switch
-	KeyModeCh           = 'Y' // Table B                      - Key name mode
-	SwitchTableCh       = 'Z' // Table A/B                    - Table switch
 	SectionSelectCh     = 'A' // Table B shifted              - Section selector
 	BellCh              = 'B' // Table B shifted              - Audible signal
 	TabCh               = 'C' // Table B shifted              - Tab (8 spaces)
@@ -28,8 +23,11 @@ const (
 	Reserved2Ch         = 'H' // Table B shifted
 	Reserved3Ch         = 'I' // Table B shifted
 	Reserved4Ch         = 'J' // Table B shifted
-	Reserved5Ch         = 'W' // Table B shifted
-	Reserved6Ch         = 'Y' // Table B shifted
+	NewLineCh           = 'Q' // Table A shifted              - \n
+	BinModeCh           = 'W' // Table B shifted & un-shifted - HEX mode
+	ShiftModeCh         = 'X' // Table B shifted & un-shifted - Shift switch
+	KeyModeCh           = 'Y' // Table B shifted & un-shifted - Key name mode
+	SwitchTableCh       = 'Z' // Table A/B                    - Table switch
 )
 
 // A section is a special part of a message that is different from the normal
