@@ -22,7 +22,7 @@ type Encoder struct {
 type encoderState struct {
 	isAlt   bool
 	isShift bool
-	isBin   bool
+	isHex   bool
 }
 
 // NewEncoder creates a new encoder that can encode messages to an output stream
@@ -155,7 +155,7 @@ func (e *Encoder) encodeStringToBuf(msg string) ([]byte, error) {
 		}
 		altsOut = e.applyEncAlts(true, e.enc.isShift, true)
 		out = append(out, altsOut...)
-		bs, err := encodeBin([]byte(string(r)))
+		bs, err := encodeHex([]byte(string(r)))
 		if err != nil {
 			return out, err
 		}
@@ -170,7 +170,7 @@ func (e *Encoder) encodeBytes(p []byte) error {
 		return nil
 	}
 	out := e.applyEncAlts(true, e.enc.isShift, true)
-	ebs, err := encodeBin(p)
+	ebs, err := encodeHex(p)
 	if err != nil {
 		return err
 	}
@@ -194,13 +194,13 @@ func (e *Encoder) applyEncAlts(useAltTable, useShifted, useHexMode bool) []byte 
 		msg = append(msg, ShiftModeCh)
 		e.enc.isShift = useShifted
 	}
-	if (useHexMode && !e.enc.isBin) || (!useHexMode && e.enc.isBin) {
+	if (useHexMode && !e.enc.isHex) || (!useHexMode && e.enc.isHex) {
 		if !e.enc.isAlt {
 			msg = append(msg, SwitchTableCh)
 			e.enc.isAlt = true
 		}
-		msg = append(msg, BinModeCh)
-		e.enc.isBin = useHexMode
+		msg = append(msg, HexModeCh)
+		e.enc.isHex = useHexMode
 	}
 	if (useAltTable && !e.enc.isAlt) || (!useAltTable && e.enc.isAlt) {
 		msg = append(msg, SwitchTableCh)
@@ -240,7 +240,7 @@ func (e *Encoder) write(p []byte) (int, error) {
 			if err != nil {
 				return 0, fmt.Errorf("key write error: %w", err)
 			}
-			alts = e.applyEncAlts(oldState.isAlt, oldState.isShift, oldState.isBin)
+			alts = e.applyEncAlts(oldState.isAlt, oldState.isShift, oldState.isHex)
 			if len(alts) > 0 {
 				p = append(alts, p...) // prepend
 				writeBytesLeft += len(alts)
@@ -264,7 +264,7 @@ func (e *Encoder) write(p []byte) (int, error) {
 				alts := e.applyEncAlts(true, e.enc.isShift, false)
 				keyOut = append(keyOut, alts...)
 				keyOut = append(keyOut, KeyModeCh) // end
-				alts = e.applyEncAlts(oldState.isAlt, oldState.isShift, oldState.isBin)
+				alts = e.applyEncAlts(oldState.isAlt, oldState.isShift, oldState.isHex)
 				keyOut = append(keyOut, alts...)
 				keyOutLen := len(keyOut)
 				if keyOutLen > reservedKeyLen {
@@ -295,7 +295,7 @@ func minInt(a, b int) int {
 	return b
 }
 
-func encodeBin(msg []byte) ([]byte, error) {
+func encodeHex(msg []byte) ([]byte, error) {
 	l := len(msg)
 	ret := make([]byte, l*2)
 	var j int

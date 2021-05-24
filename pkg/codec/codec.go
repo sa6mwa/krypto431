@@ -24,7 +24,7 @@ const (
 	Reserved3Ch         = 'I' // Table B shifted
 	Reserved4Ch         = 'J' // Table B shifted
 	NewLineCh           = 'Q' // Table A shifted              - \n
-	BinModeCh           = 'W' // Table B shifted & un-shifted - HEX mode
+	HexModeCh           = 'W' // Table B shifted & un-shifted - HEX mode
 	ShiftModeCh         = 'X' // Table B shifted & un-shifted - Shift switch
 	KeyModeCh           = 'Y' // Table B shifted & un-shifted - Key name mode
 	SwitchTableCh       = 'Z' // Table A/B                    - Table switch

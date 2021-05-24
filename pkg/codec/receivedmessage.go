@@ -151,7 +151,7 @@ func (r *ReceivedMessage) flushHex() error {
 	} else {
 		r.leftoverBytes = nil
 	}
-	decBMsg, err := decodeBin(r.hexBuf[:bytesToDecode*2])
+	decBMsg, err := decodeHex(r.hexBuf[:bytesToDecode*2])
 	if err != nil {
 		return fmt.Errorf("error decoding hex data: %w", err)
 	}

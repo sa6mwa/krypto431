@@ -17,7 +17,7 @@ type Decoder struct {
 type decodeState struct {
 	isAlt   bool
 	isShift bool
-	isBin   bool
+	isHex   bool
 	isKey   bool
 }
 
@@ -62,7 +62,7 @@ loop:
 			continue
 		}
 
-		if m.dec.isBin && b >= 'A' && b <= 'P' {
+		if m.dec.isHex && b >= 'A' && b <= 'P' {
 			m.curMsg.appendHex(b)
 			continue
 		}
@@ -75,8 +75,8 @@ loop:
 		// Special bytes handling
 		if m.dec.isAlt {
 			switch b {
-			case BinModeCh:
-				m.dec.isBin = !m.dec.isBin
+			case HexModeCh:
+				m.dec.isHex = !m.dec.isHex
 				err := m.curMsg.setHexMode()
 				if err != nil {
 					return 0, err
@@ -203,7 +203,7 @@ func (m *Decoder) Close() error {
 	return nil
 }
 
-func decodeBin(msg []byte) ([]byte, error) {
+func decodeHex(msg []byte) ([]byte, error) {
 	l := len(msg)
 	if l%2 != 0 {
 		return nil, fmt.Errorf("uneven byte count")
