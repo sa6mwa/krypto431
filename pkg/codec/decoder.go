@@ -58,7 +58,7 @@ loop:
 		}
 
 		if m.curMsg != nil && m.curMsg.isSectionMode() {
-			m.curMsg.setSection(b)
+			m.curMsg.setSection(Section(b))
 			continue
 		}
 
@@ -155,8 +155,7 @@ loop:
 				case TabCh:
 					m.curMsg.append('\t')
 					continue
-				case Reserved1Ch, Reserved2Ch, Reserved3Ch, Reserved4Ch,
-					Reserved5Ch, Reserved6Ch:
+				case Reserved1Ch, Reserved2Ch, Reserved3Ch, Reserved4Ch:
 					continue
 				default:
 					m.curMsg.append([]byte(string([]rune(table)[b-'A']))...)

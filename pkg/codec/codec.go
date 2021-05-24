@@ -30,12 +30,17 @@ const (
 	SwitchTableCh       = 'Z' // Table A/B                    - Table switch
 )
 
+type Section byte
+
 // A section is a special part of a message that is different from the normal
 // message data
 const (
-	SectionDefault  = 0
-	SectionChecksum = 'C'
-	SectionHeader   = 'H'
+	// SectionDefault - Default message data
+	SectionDefault = Section(0)
+	// SectionChecksum - CRC32 checksum of all data that came before
+	SectionChecksum = Section('C')
+	// SectionHeader - Header section with key value pairs of metadata
+	SectionHeader = Section('H')
 )
 
 /*

@@ -13,7 +13,7 @@ const reservedKeyLen = 12
 
 type Encoder struct {
 	enc       encoderState
-	section   byte
+	section   Section
 	w         io.Writer
 	encrypter kenc.Encrypter
 	curKey    keystore.Key
@@ -65,12 +65,12 @@ func (e *Encoder) Close() error {
 }*/
 
 // setSection sets the section type
-func (e *Encoder) setSection(section byte) error {
+func (e *Encoder) setSection(section Section) error {
 	prevSection := e.section
 	out := e.applyEncAlts(true, true, false)
 	out = append(out, SectionSelectCh)
 	if section != prevSection && section != 0 {
-		out = append(out, section)
+		out = append(out, byte(section))
 	}
 	e.section = section
 	//e.bufC <- out

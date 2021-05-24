@@ -13,9 +13,9 @@ type ReceivedMessage struct {
 	Header        Header
 	leftoverBytes []byte
 	hash          hash.Hash
-	section       byte
+	section       Section
 	sectionMode   bool
-	msgBuf2       map[byte][]byte
+	msgBuf2       map[Section][]byte
 	hexBuf        []byte
 	hexMode       bool
 	hasHeader     bool
@@ -29,7 +29,7 @@ type ReceivedMessage struct {
 func newReceivedMessage() *ReceivedMessage {
 	return &ReceivedMessage{
 		Header:  Header{},
-		msgBuf2: map[byte][]byte{},
+		msgBuf2: map[Section][]byte{},
 		readC:   make(chan []byte),
 		hash:    crc32.NewIEEE(),
 	}
@@ -74,14 +74,14 @@ func (r *ReceivedMessage) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-func (r *ReceivedMessage) setSection(section byte) error {
+func (r *ReceivedMessage) setSection(section Section) error {
 	r.sectionMode = false
 	r.section = section
 	r.msgBuf2[section] = nil
 	return nil
 }
 
-func (r *ReceivedMessage) closeSection(section byte) error {
+func (r *ReceivedMessage) closeSection(section Section) error {
 	r.section = SectionDefault
 	var err error
 	switch section {
