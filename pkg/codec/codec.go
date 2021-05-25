@@ -18,17 +18,17 @@ const (
 	SectionSelectCh     = 'A' // Table B shifted - Section selector
 	BellCh              = 'B' // Table B shifted - Audible signal
 	TabCh               = 'C' // Table B shifted - Tab (8 spaces)
-	CheckerModeCh       = 'D' // Table B shifted - Hash/CRC mode
+	Reserved1Ch         = 'D' // Table B shifted
 	EndOfMessageCh      = 'E' // Table B shifted - End of message
 	EndOfTransmissionCh = 'F' // Table B shifted - End of transmission
-	Reserved1Ch         = 'G' // Table B shifted
-	Reserved2Ch         = 'H' // Table B shifted
-	Reserved3Ch         = 'I' // Table B shifted
-	Reserved4Ch         = 'J' // Table B shifted
+	Reserved2Ch         = 'G' // Table B shifted
+	Reserved3Ch         = 'H' // Table B shifted
+	Reserved4Ch         = 'I' // Table B shifted
+	Reserved5Ch         = 'J' // Table B shifted
 	NewLineCh           = 'Q' // Table A shifted - \n
-	HexModeCh           = 'W' // Table B shifted / un-shifted - HEX mode
-	ShiftModeCh         = 'X' // Table B shifted / un-shifted - Shift switch
-	KeyModeCh           = 'Y' // Table B shifted / un-shifted - Key name mode
+	HexModeCh           = 'W' // Table B shifted / un-shifted  - HEX mode
+	ShiftModeCh         = 'X' // Table B shifted / un-shifted  - Shift switch
+	KeyModeCh           = 'Y' // Table B shifted / un-shifted  - Key name mode
 	SwitchTableCh       = 'Z' // Table A/B shifted / un-sifted - Table switch
 )
 
@@ -43,52 +43,6 @@ const (
 	SectionChecksum = Section('C')
 	// SectionHeader - Header section with key value pairs of metadata
 	SectionHeader = Section('H')
-)
-
-// Predefined standard headers
-const (
-	// HeaderFilename, Filename of the data, if applicable:
-	// Use hex mode to encode in UTF-8
-	HeaderFilename = "FN"
-	// HeaderContentLength, length of the data/message in bytes before encoding
-	HeaderContentLength = "CL"
-	// HeaderContentType, data type of the data, usually a mime type, but can
-	// also be a short file extension (JPG/TXT/etc).
-	// Defaults to application/octet-stream (generic 8 bit data) if missing
-	HeaderContentType = "CT"
-	// HeaderContentEncoding defines any special encoding scheme used.
-	// For example gzip
-	HeaderContentEncoding = "CE"
-	// HeaderTimestamp is a timestamp at which the message was orginated
-	// Format is ISO 8601. Example: 2021-05-24T13:43:20Z
-	// The time part can be excluded if needed
-	HeaderTimestamp = "TS"
-	// HeaderTimeNr is a simplified timestamp at which the message was orginated
-	// Format is NNHHMM[Z] where NN is the day, HH is hour and MM is minute,
-	// Z is an optional time zone code
-	// If the time number is in the switch between daylight savings, use odd
-	// numbers for the first hour and even numbers for the second time the
-	// same hours occurres
-	HeaderTimeNr = "TNR"
-	// HeaderDateTimeGroup is a simplified timestamp at witch the message was orginated.
-	// Format is DD HHMMZ MON YY
-	// Example 1: 09 1630Z JUL 11 represents (Jul) 09 16:30 Jul 2011 (UTC).
-	// Example 2: 22 0301Z May 21 represents (May) 22 03:01, May 2021 (UTC).
-	HeaderDateTimeGroup = "DTG"
-	// HeaderTo is a comma separated list of recipients (who should receive the message)
-	HeaderTo = "TO"
-	// HeaderFrom is a comma separated list of senders (who sent the message)
-	HeaderFrom = "DE"
-	// HeaderCc is a comma separated list of carbon copy recipients
-	HeaderCc = "CC"
-	// HeaderBcc is a comma separated list of blind carbon copy recipients
-	HeaderBcc = "BCC"
-	// HeaderPart defines that this message is part P of N parts.
-	// Format is: P,N
-	HeaderPart = "PART"
-	// HeaderLanguage identifies the language used in this message
-	// By convention use the english language name
-	HeaderLanguage = "LANG"
 )
 
 /*

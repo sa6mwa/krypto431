@@ -147,7 +147,7 @@ loop:
 				case TabCh:
 					d.curMsg.append('\t')
 					continue
-				case Reserved1Ch, Reserved2Ch, Reserved3Ch, Reserved4Ch:
+				case Reserved1Ch, Reserved2Ch, Reserved3Ch, Reserved4Ch, Reserved5Ch:
 					continue
 				default:
 					d.curMsg.append([]byte(string([]rune(table)[b-'A']))...)
