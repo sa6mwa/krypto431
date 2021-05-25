@@ -7,36 +7,30 @@ import (
 )
 
 type Decoder struct {
-	dec       decodeState
+	state     cState
 	curMsg    *ReceivedMessage
 	msgC      chan *ReceivedMessage
 	decrypter kenc.Decrypter
 	curKey    string
 }
 
-type decodeState struct {
-	isAlt   bool
-	isShift bool
-	isHex   bool
-	isKey   bool
-}
-
 // NewDecoder creates a new decoder that decodes an encoded data stream
+// An optional decrypter can be supplied if the stream is encrypted
 func NewDecoder(decrypter kenc.Decrypter) *Decoder {
-	m := Decoder{
+	d := Decoder{
 		msgC:      make(chan *ReceivedMessage),
 		decrypter: decrypter,
 	}
-	return &m
+	return &d
 }
 
 // MsgC returns the message channel where decoded messages are received
-func (m *Decoder) MsgC() chan *ReceivedMessage {
-	return m.msgC
+func (d *Decoder) MsgC() chan *ReceivedMessage {
+	return d.msgC
 }
 
 // Write writes data into the decoder so they can be processed
-func (m *Decoder) Write(p []byte) (int, error) {
+func (d *Decoder) Write(p []byte) (int, error) {
 	decBuf := make([]byte, 1)
 loop:
 	for _, b := range p {
@@ -44,62 +38,62 @@ loop:
 			continue
 		}
 
-		if m.decrypter != nil && m.curKey != "" {
+		if d.decrypter != nil && d.curKey != "" {
 			// Decrypt byte
-			_, err := m.decrypter.Write([]byte{b})
+			_, err := d.decrypter.Write([]byte{b})
 			if err != nil {
 				return 0, fmt.Errorf("decrypt write error: %w", err)
 			}
-			_, err = m.decrypter.Read(decBuf)
+			_, err = d.decrypter.Read(decBuf)
 			if err != nil {
 				return 0, fmt.Errorf("decrypt read error: %w", err)
 			}
 			b = decBuf[0]
 		}
 
-		if m.curMsg != nil && m.curMsg.isSectionMode() {
-			m.curMsg.setSection(Section(b))
+		if d.curMsg != nil && d.curMsg.isSectionMode() {
+			d.curMsg.setSection(Section(b))
 			continue
 		}
 
-		if m.dec.isHex && b >= 'A' && b <= 'P' {
-			m.curMsg.appendHex(b)
+		if d.state.hex && b >= 'A' && b <= 'P' {
+			d.curMsg.appendHex(b)
 			continue
 		}
 
 		if b == SwitchTableCh {
-			m.dec.isAlt = !m.dec.isAlt
+			d.state.alt = !d.state.alt
 			continue
 		}
 
 		// Special bytes handling
-		if m.dec.isAlt {
+		if d.state.alt {
 			switch b {
 			case HexModeCh:
-				m.dec.isHex = !m.dec.isHex
-				err := m.curMsg.setHexMode()
+				d.state.hex = !d.state.hex
+				err := d.curMsg.setHexMode()
 				if err != nil {
 					return 0, err
 				}
 				continue
 			case ShiftModeCh:
-				m.dec.isShift = !m.dec.isShift
+				d.state.shift = !d.state.shift
 				continue
 			}
-			if m.dec.isShift {
+			if d.state.shift {
 				switch b {
 				case EndOfMessageCh:
-					err := m.curMsg.close()
-					m.curMsg = nil
+					err := d.curMsg.close()
+					d.curMsg = nil
 					if err != nil {
 						return 0, fmt.Errorf("error closing message: %w", err)
 					}
 					continue
 				case EndOfTransmissionCh:
-					m.dec = decodeState{}
-					if m.curMsg != nil {
-						err := m.curMsg.close()
-						m.curMsg = nil
+					d.state = cState{}
+					if d.curMsg != nil {
+						err := d.curMsg.close()
+						d.curMsg = nil
 						if err != nil {
 							return 0, fmt.Errorf("error closing message: %w", err)
 						}
@@ -109,79 +103,78 @@ loop:
 			}
 		}
 
-		if m.curMsg == nil {
-			m.curMsg = newReceivedMessage()
-			m.msgC <- m.curMsg
+		if d.curMsg == nil {
+			d.curMsg = newReceivedMessage()
+			d.msgC <- d.curMsg
 		}
 
 		table := ""
-		if m.dec.isAlt {
-			if m.dec.isShift {
+		if d.state.alt {
+			if d.state.shift {
 				table = CharTableBL
 			} else {
 				table = CharTableBU
 			}
 		} else {
-			if m.dec.isShift {
+			if d.state.shift {
 				table = CharTableAL
 			} else {
 				table = CharTableAU
 			}
 		}
 
-		if m.dec.isAlt {
+		if d.state.alt {
 			switch b {
 			case KeyModeCh:
-				m.dec.isKey = !m.dec.isKey
-				isKeyMode := m.curMsg.toggleKeyMode()
-				if !isKeyMode && m.decrypter != nil {
-					m.curKey = m.curMsg.getCurKey()
-					_, err := m.decrypter.OpenKey(m.curKey)
+				isKeyMode := d.curMsg.toggleKeyMode()
+				if !isKeyMode && d.decrypter != nil {
+					d.curKey = d.curMsg.getCurKey()
+					_, err := d.decrypter.OpenKey(d.curKey)
 					if err != nil {
-						return 0, fmt.Errorf("error opening key '%s': %w", m.curKey, err)
+						return 0, fmt.Errorf("error opening key '%s': %w", d.curKey, err)
 					}
 				}
 				continue
 			}
-			if m.dec.isShift {
+			if d.state.shift {
 				switch b {
 				case SectionSelectCh:
-					m.curMsg.setSectionMode()
+					d.curMsg.setSectionMode()
 					continue
 				case BellCh:
-					m.curMsg.append('\a')
+					d.curMsg.append('\a')
 					continue
 				case TabCh:
-					m.curMsg.append('\t')
+					d.curMsg.append('\t')
 					continue
 				case Reserved1Ch, Reserved2Ch, Reserved3Ch, Reserved4Ch:
 					continue
 				default:
-					m.curMsg.append([]byte(string([]rune(table)[b-'A']))...)
+					d.curMsg.append([]byte(string([]rune(table)[b-'A']))...)
 					continue
 				}
 			} else {
-				m.curMsg.append([]byte(string([]rune(table)[b-'A']))...)
+				d.curMsg.append([]byte(string([]rune(table)[b-'A']))...)
 				continue
 			}
 		} else {
-			if m.dec.isShift {
+			if d.state.shift {
 				switch b {
 				case NewLineCh:
-					m.curMsg.append('\n')
+					d.curMsg.append('\n')
 					continue
 				default:
-					m.curMsg.append([]byte(string([]rune(table)[b-'A']))...)
+					d.curMsg.append([]byte(string([]rune(table)[b-'A']))...)
 					continue
 				}
 			} else {
-				m.curMsg.append([]byte(string([]rune(table)[b-'A']))...)
+				d.curMsg.append([]byte(string([]rune(table)[b-'A']))...)
 				continue
 			}
 		}
 	}
-	if m.curMsg != nil {
-		err := m.curMsg.flush()
+	if d.curMsg != nil {
+		err := d.curMsg.flush()
 		if err != nil {
 			return 0, fmt.Errorf("flush error: %w", err)
 		}
@@ -191,10 +184,10 @@ loop:
 }
 
 // Close closes the decoder
-func (m *Decoder) Close() error {
-	defer close(m.msgC)
-	if m.curMsg != nil {
-		err := m.curMsg.close()
+func (d *Decoder) Close() error {
+	defer close(d.msgC)
+	if d.curMsg != nil {
+		err := d.curMsg.close()
 		if err != nil {
 			return err
 		}

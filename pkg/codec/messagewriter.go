@@ -9,12 +9,13 @@ import (
 )
 
 type MessageWriter struct {
-	Header      Header
-	headerSent  bool
-	filename    string
-	contentType string
-	checksum    hash.Hash
-	encoder     *Encoder
+	Header       Header
+	headerSent   bool
+	filename     string
+	contentType  string
+	checksum     hash.Hash
+	encoder      *Encoder
+	noEndMarkers bool
 }
 
 func (m *MessageWriter) WithCRC32() *MessageWriter {
@@ -86,7 +87,10 @@ func (m *MessageWriter) Close() error {
 			return err
 		}
 	}
-	return m.encoder.endOfMessage()
+	if !m.noEndMarkers {
+		return m.encoder.endOfMessage()
+	}
+	return nil
 }
 
 func (m *MessageWriter) writeHeader() (bool, error) {

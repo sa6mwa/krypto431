@@ -1,6 +1,7 @@
 package codec
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
@@ -8,85 +9,82 @@ import (
 	"github.com/sa6mwa/krypto431/pkg/keystore"
 )
 
-const chunkLen = 5
 const reservedKeyLen = 16
 
 type Encoder struct {
-	enc        encoderState
-	section    Section
-	w          io.Writer
-	encrypter  kenc.Encrypter
-	curKey     keystore.Key
-	writeState encoderState
+	section      Section
+	w            io.Writer
+	encrypter    kenc.Encrypter
+	curKey       keystore.Key
+	encState     cState
+	writeState   cState
+	noEndMarkers bool
+	msgCount     int
 }
 
-// NewEncoder creates a new encoder that can encode messages to an output stream
+var ErrMaxOneMessage = errors.New("max one message allowed when using no end markers")
+
+// NewEncoder creates a new encoder that can encode messages to the output
+// writer (w). An optional encrypter can be used to encrypt the stream
 func NewEncoder(w io.Writer, encrypter kenc.Encrypter) *Encoder {
 	e := Encoder{
-		//bufC: make(chan []byte),
 		w:         w,
 		encrypter: encrypter,
 	}
 	return &e
 }
 
+func (e *Encoder) WithNoEndMarkers() *Encoder {
+	e.noEndMarkers = true
+	return e
+}
+
 // NewMessage creates a new message to send
-func (e *Encoder) NewMessage() *MessageWriter {
-	return &MessageWriter{
-		Header:  Header{},
-		encoder: e,
+func (e *Encoder) NewMessage() (*MessageWriter, error) {
+	if e.noEndMarkers && e.msgCount >= 1 {
+		return nil, ErrMaxOneMessage
 	}
+	e.msgCount++
+	return &MessageWriter{
+		Header:       Header{},
+		encoder:      e,
+		noEndMarkers: e.noEndMarkers,
+	}, nil
 }
 
 // Close closes the encoder and send an optional EndOfTransmission
 func (e *Encoder) Close() error {
-	_ = e.endOfTransmission()
-	//close(e.bufC)
+	if !e.noEndMarkers {
+		_ = e.endOfTransmission()
+	}
 	return nil
 }
-
-// Read is used to read the encoded data from the encoder
-/*func (e *Encoder) Read(p []byte) (int, error) {
-	if len(e.curBuf) == 0 {
-		var ok bool
-		e.curBuf, ok = <-e.bufC
-		if !ok {
-			return 0, io.EOF
-		}
-	}
-	n := copy(p, e.curBuf)
-	e.curBuf = e.curBuf[n:]
-	return n, nil
-}*/
 
 // setSection sets the section type
 func (e *Encoder) setSection(section Section) error {
 	prevSection := e.section
-	out := e.applyEncAlts(true, true, false)
+	out := e.encState.modifyAndGetBytes(cState{true, true, false})
 	out = append(out, SectionSelectCh)
 	if section != prevSection && section != 0 {
 		out = append(out, byte(section))
 	}
 	e.section = section
-	//e.bufC <- out
 	_, err := e.write(out)
 	return err
 }
 
 // endOfMessage appends an EndOfMessage indicator in the stream
 func (e *Encoder) endOfMessage() error {
-	out := e.applyEncAlts(true, true, false)
+	out := e.encState.modifyAndGetBytes(cState{true, true, false})
 	out = append(out, EndOfMessageCh)
-	//e.bufC <- out
 	_, err := e.write(out)
 	return err
 }
 
 // endOfTransmission send an EndOfTransmission indicator in the stream
 func (e *Encoder) endOfTransmission() error {
-	out := e.applyEncAlts(true, true, false)
+	out := e.encState.modifyAndGetBytes(cState{true, true, false})
 	out = append(out, EndOfTransmissionCh)
-	//e.bufC <- out
 	_, err := e.write(out)
 	return err
 
@@ -94,7 +92,7 @@ func (e *Encoder) endOfTransmission() error {
 
 // encodeString encodes a UTF-8 string into the stream
 func (e *Encoder) encodeString(msg string) error {
-	out, err := e.encodeStringToBuf(&e.enc, msg)
+	out, err := e.encodeStringToBuf(&e.encState, msg)
 	if err != nil {
 		return err
 	}
@@ -106,58 +104,50 @@ func (e *Encoder) encodeString(msg string) error {
 }
 
 // encodeString encodes a UTF-8 string into the stream
-func (e *Encoder) encodeStringToBuf(state *encoderState, msg string) ([]byte, error) {
+func (e *Encoder) encodeStringToBuf(state *cState, msg string) ([]byte, error) {
 	var out []byte
 	for _, r := range msg {
 		var ch rune = DummyCh
 		var idx int
 		var err error
-		var altsOut []byte
+		var stateBuf []byte
 		if idx = runeIndex(CharTableAU, r); idx >= 0 {
-			altsOut = state.modifyAndGetBytes(encoderState{false, false, false})
-			//altsOut = e.applyEncAlts(false, false, false)
+			stateBuf = state.modifyAndGetBytes(cState{false, false, false})
 			ch = []rune(CharTableAU)[idx]
 		} else if idx = runeIndex(CharTableAL, r); idx >= 0 {
-			//altsOut = e.applyEncAlts(false, true, false)
-			altsOut = state.modifyAndGetBytes(encoderState{false, true, false})
+			stateBuf = state.modifyAndGetBytes(cState{false, true, false})
 			ch = []rune(CharTableAU)[idx]
 		} else if idx = runeIndex(CharTableBU, r); idx >= 0 {
-			//altsOut = e.applyEncAlts(true, false, false)
-			altsOut = state.modifyAndGetBytes(encoderState{true, false, false})
+			stateBuf = state.modifyAndGetBytes(cState{true, false, false})
 			ch = []rune(CharTableAU)[idx]
 		} else if idx = runeIndex(CharTableBL, r); idx >= 0 {
-			//altsOut = e.applyEncAlts(true, true, false)
-			altsOut = state.modifyAndGetBytes(encoderState{true, true, false})
+			stateBuf = state.modifyAndGetBytes(cState{true, true, false})
 			ch = []rune(CharTableAU)[idx]
 		}
-		out = append(out, altsOut...)
+		out = append(out, stateBuf...)
 		if idx >= 0 && ch != DummyCh {
 			out = append(out, byte(idx)+'A')
 			continue
 		}
 		switch r {
 		case '\n':
-			//altsOut = e.applyEncAlts(false, true, false)
-			altsOut = state.modifyAndGetBytes(encoderState{false, true, false})
-			out = append(out, altsOut...)
+			stateBuf = state.modifyAndGetBytes(cState{false, true, false})
+			out = append(out, stateBuf...)
 			out = append(out, NewLineCh)
 			continue
 		case '\a':
-			//altsOut = e.applyEncAlts(true, true, false)
-			altsOut = state.modifyAndGetBytes(encoderState{true, true, false})
-			out = append(out, altsOut...)
+			stateBuf = state.modifyAndGetBytes(cState{true, true, false})
+			out = append(out, stateBuf...)
 			out = append(out, BellCh)
 			continue
 		case '\t':
-			//altsOut = e.applyEncAlts(true, true, false)
-			altsOut = state.modifyAndGetBytes(encoderState{true, true, false})
-			out = append(out, altsOut...)
+			stateBuf = state.modifyAndGetBytes(cState{true, true, false})
+			out = append(out, stateBuf...)
 			out = append(out, TabCh)
 			continue
 		}
-		//altsOut = e.applyEncAlts(true, e.enc.isShift, true)
-		altsOut = state.modifyAndGetBytes(encoderState{true, state.isShift, true})
-		out = append(out, altsOut...)
+		stateBuf = state.modifyAndGetBytes(cState{true, state.shift, true})
+		out = append(out, stateBuf...)
 		bs, err := encodeHex([]byte(string(r)))
 		if err != nil {
 			return out, err
@@ -172,54 +162,23 @@ func (e *Encoder) encodeBytes(p []byte) error {
 	if len(p) == 0 {
 		return nil
 	}
-	out := e.applyEncAlts(true, e.enc.isShift, true)
+	out := e.encState.modifyAndGetBytes(cState{true, e.encState.shift, true})
 	ebs, err := encodeHex(p)
 	if err != nil {
 		return err
 	}
 	out = append(out, ebs...)
-	//e.bufC <- out
-	//return nil
 	_, err = e.write(out)
 	return err
-}
-
-// applyEncAlts makes sure the correct encoding flags are set to write
-// the appropriate character table and shift modes are written
-func (e *Encoder) applyEncAlts(useAltTable, useShifted, useHexMode bool) []byte {
-	var out []byte
-	var msg []byte
-	if (useShifted && !e.enc.isShift) || (!useShifted && e.enc.isShift) {
-		if !e.enc.isAlt {
-			msg = append(msg, SwitchTableCh)
-			e.enc.isAlt = true
-		}
-		msg = append(msg, ShiftModeCh)
-		e.enc.isShift = useShifted
-	}
-	if (useHexMode && !e.enc.isHex) || (!useHexMode && e.enc.isHex) {
-		if !e.enc.isAlt {
-			msg = append(msg, SwitchTableCh)
-			e.enc.isAlt = true
-		}
-		msg = append(msg, HexModeCh)
-		e.enc.isHex = useHexMode
-	}
-	if (useAltTable && !e.enc.isAlt) || (!useAltTable && e.enc.isAlt) {
-		msg = append(msg, SwitchTableCh)
-		e.enc.isAlt = useAltTable
-	}
-	if msg != nil {
-		out = append(out, msg...)
-	}
-	return out
 }
 
 func (e *Encoder) write(p []byte) (int, error) {
 	var err error
 	if e.encrypter != nil {
+		// We have an encrypter, so we pass the data thru it
 		if e.curKey == nil {
 			// First time we don't have a key (in the beginning of the stream)
+			// So we need to save the key name to the stream (un-encrypted)
 			e.curKey, err = e.encrypter.GetNextKey()
 			if err != nil {
 				return 0, fmt.Errorf("error getting next key: %w", err)
@@ -228,25 +187,19 @@ func (e *Encoder) write(p []byte) (int, error) {
 			if err != nil {
 				return 0, fmt.Errorf("error opening key: %w", err)
 			}
-			// First time we write the key un-encrypted
-
-			keyOut := e.writeState.modifyAndGetBytes(encoderState{true, false, false})
-			keyOut = append(keyOut, KeyModeCh) // begin
-			keyData, err := e.encodeStringToBuf(&e.writeState, e.curKey.Name())
+			keyOut, err := e.getKeyBuf()
 			if err != nil {
-				return 0, fmt.Errorf("encode error: %w", err)
+				return 0, err
 			}
-			keyOut = append(keyOut, keyData...)
-			alts := e.writeState.modifyAndGetBytes(encoderState{true, e.writeState.isShift, false})
-			keyOut = append(keyOut, alts...)
-			keyOut = append(keyOut, KeyModeCh) // end
-			// Reset the state to the start state
 			_, err = e.w.Write(keyOut)
 			if err != nil {
 				return 0, fmt.Errorf("key write error: %w", err)
 			}
-			alts = e.writeState.modifyAndGetBytes(encoderState{false, false, false})
-			_, err = e.encrypter.Write(alts)
+			// After the key name is written we start writing encrypted data
+			// right away. This first data is to reset the state to the start
+			// condition
+			stateBuf := e.writeState.modifyAndGetBytes(cState{false, false, false})
+			_, err = e.encrypter.Write(stateBuf)
 			if err != nil {
 				return 0, fmt.Errorf("write error: %w", err)
 			}
@@ -256,23 +209,18 @@ func (e *Encoder) write(p []byte) (int, error) {
 		writeBytesLeft := len(p)
 		for writeBytesLeft > 0 {
 			if e.curKey.BytesLeft() <= reservedKeyLen {
+				// We need to change to the next key since there are only
+				// a few bytes left in this key
 				e.curKey, err = e.encrypter.GetNextKey()
 				if err != nil {
 					return 0, fmt.Errorf("error getting next key: %w", err)
 				}
 				oldState := e.writeState
-				keyOut := e.writeState.modifyAndGetBytes(encoderState{true, e.writeState.isShift, false})
-				keyOut = append(keyOut, KeyModeCh) // begin
-				keyData, err := e.encodeStringToBuf(&e.writeState, e.curKey.Name())
+				keyOut, err := e.getKeyBuf()
 				if err != nil {
-					return 0, fmt.Errorf("encode error: %w", err)
+					return 0, err
 				}
-				keyOut = append(keyOut, keyData...)
-				alts := e.writeState.modifyAndGetBytes(encoderState{true, e.writeState.isShift, false})
-				keyOut = append(keyOut, alts...)
-				keyOut = append(keyOut, KeyModeCh) // end
-				keyOutLen := len(keyOut)
-				if keyOutLen > reservedKeyLen {
+				if len(keyOut) > reservedKeyLen {
 					return 0, fmt.Errorf("reserved key length too short to write next key name")
 				}
 				_, err = e.encrypter.Write(keyOut)
@@ -283,11 +231,15 @@ func (e *Encoder) write(p []byte) (int, error) {
 				if err != nil {
 					return 0, fmt.Errorf("error opening key: %w", err)
 				}
+				// Get the bytes needed to reset the stream state, but don't
+				// modify the writeState. This is because the writeState will
+				// be set in the setFromBytes() function later
 				temp := e.writeState
-				alts = temp.modifyAndGetBytes(oldState)
-				p = append(alts, p...)
-				writeBytesLeft += len(alts)
+				stateBuf := temp.modifyAndGetBytes(oldState)
+				p = append(stateBuf, p...) // prepend the state bytes
+				writeBytesLeft += len(stateBuf)
 			}
+
 			writeSize := minInt(writeBytesLeft, e.curKey.BytesLeft()-reservedKeyLen)
 			writeP := p[:writeSize]
 			e.writeState.setFromBytes(writeP)
@@ -303,6 +255,21 @@ func (e *Encoder) write(p []byte) (int, error) {
 		return int(ni64), err
 	}
 	return e.w.Write(p)
+}
+
+// getKeyBuf returns an encoded key byte sequence to be written to the stream
+func (e *Encoder) getKeyBuf() ([]byte, error) {
+	keyOut := e.writeState.modifyAndGetBytes(cState{true, e.writeState.shift, false})
+	keyOut = append(keyOut, KeyModeCh) // begin key mode
+	keyData, err := e.encodeStringToBuf(&e.writeState, e.curKey.Name())
+	if err != nil {
+		return nil, fmt.Errorf("encode error: %w", err)
+	}
+	keyOut = append(keyOut, keyData...)
+	stateBuf := e.writeState.modifyAndGetBytes(cState{true, e.writeState.shift, false})
+	keyOut = append(keyOut, stateBuf...)
+	keyOut = append(keyOut, KeyModeCh) // end key mode
+	return keyOut, nil
 }
 
 func minInt(a, b int) int {

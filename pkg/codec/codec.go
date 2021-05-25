@@ -6,6 +6,8 @@ var (
 	ErrInvalidMsgData = fmt.Errorf("invalid msg data, only A-Z allowed")
 )
 
+const chunkLen = 5
+
 const CharTableAU = `ABCDEFGHIJKLMNOP RSTUVWXY_`
 const CharTableAL = `abcdefghijklmnop_rstuvwxy_`
 const CharTableBU = `0123456789ÅÄÖÆØ.Q?Z+-,____`

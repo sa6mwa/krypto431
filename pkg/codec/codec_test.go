@@ -68,9 +68,10 @@ func TestCodec(t *testing.T) {
 	}()
 
 	for _, encMessage := range encMessages {
-		msg := enc.NewMessage()
+		msg, err := enc.NewMessage()
+		assert.NoError(t, err)
 		msg.WithCRC32()
-		err := msg.WriteString(encMessage)
+		err = msg.WriteString(encMessage)
 		assert.NoError(t, err)
 		err = msg.Close()
 		assert.NoError(t, err)
