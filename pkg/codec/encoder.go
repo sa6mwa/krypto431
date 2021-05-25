@@ -20,12 +20,6 @@ type Encoder struct {
 	writeState encoderState
 }
 
-type encoderState struct {
-	isAlt   bool
-	isShift bool
-	isHex   bool
-}
-
 // NewEncoder creates a new encoder that can encode messages to an output stream
 func NewEncoder(w io.Writer, encrypter kenc.Encrypter) *Encoder {
 	e := Encoder{
@@ -243,7 +237,6 @@ func (e *Encoder) write(p []byte) (int, error) {
 				return 0, fmt.Errorf("encode error: %w", err)
 			}
 			keyOut = append(keyOut, keyData...)
-			//alts := e.applyEncAlts(true, e.enc.isShift, false)
 			alts := e.writeState.modifyAndGetBytes(encoderState{true, e.writeState.isShift, false})
 			keyOut = append(keyOut, alts...)
 			keyOut = append(keyOut, KeyModeCh) // end
@@ -268,7 +261,6 @@ func (e *Encoder) write(p []byte) (int, error) {
 					return 0, fmt.Errorf("error getting next key: %w", err)
 				}
 				oldState := e.writeState
-				//keyOut := e.applyEncAlts(true, e.enc.isShift, false)
 				keyOut := e.writeState.modifyAndGetBytes(encoderState{true, e.writeState.isShift, false})
 				keyOut = append(keyOut, KeyModeCh) // begin
 				keyData, err := e.encodeStringToBuf(&e.writeState, e.curKey.Name())
@@ -276,7 +268,6 @@ func (e *Encoder) write(p []byte) (int, error) {
 					return 0, fmt.Errorf("encode error: %w", err)
 				}
 				keyOut = append(keyOut, keyData...)
-				//alts := e.applyEncAlts(true, e.enc.isShift, false)
 				alts := e.writeState.modifyAndGetBytes(encoderState{true, e.writeState.isShift, false})
 				keyOut = append(keyOut, alts...)
 				keyOut = append(keyOut, KeyModeCh) // end
@@ -292,7 +283,8 @@ func (e *Encoder) write(p []byte) (int, error) {
 				if err != nil {
 					return 0, fmt.Errorf("error opening key: %w", err)
 				}
-				alts = e.writeState.modifyAndGetBytes(oldState)
+				temp := e.writeState
+				alts = temp.modifyAndGetBytes(oldState)
 				p = append(alts, p...)
 				writeBytesLeft += len(alts)
 			}
@@ -330,49 +322,4 @@ func encodeHex(msg []byte) ([]byte, error) {
 		j += 2
 	}
 	return ret, nil
-}
-
-func (s *encoderState) modifyAndGetBytes(new encoderState) []byte {
-	var out []byte
-	if (new.isShift && !s.isShift) || (!new.isShift && s.isShift) {
-		if !s.isAlt {
-			out = append(out, SwitchTableCh)
-			s.isAlt = true
-		}
-		out = append(out, ShiftModeCh)
-		s.isShift = new.isShift
-	}
-	if (new.isHex && !s.isHex) || (!new.isHex && s.isHex) {
-		if !s.isAlt {
-			out = append(out, SwitchTableCh)
-			s.isAlt = true
-		}
-		out = append(out, HexModeCh)
-		s.isHex = new.isHex
-	}
-	if (new.isAlt && !s.isAlt) || (!new.isAlt && s.isAlt) {
-		out = append(out, SwitchTableCh)
-		s.isAlt = new.isAlt
-	}
-	return out
-}
-
-func (s *encoderState) setFromBytes(p []byte) {
-	for _, b := range p {
-		switch b {
-		case SwitchTableCh:
-			s.isAlt = !s.isAlt
-			continue
-		}
-		if s.isAlt {
-			switch b {
-			case HexModeCh:
-				s.isHex = !s.isHex
-				continue
-			case ShiftModeCh:
-				s.isShift = !s.isShift
-				continue
-			}
-		}
-	}
 }

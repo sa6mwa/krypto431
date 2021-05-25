@@ -141,7 +141,6 @@ loop:
 						return 0, fmt.Errorf("error opening key '%s': %w", m.curKey, err)
 					}
 				}
-
 				continue
 			}
 			if m.dec.isShift {

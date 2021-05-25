@@ -8,13 +8,13 @@ import (
 	"testing"
 
 	"github.com/sa6mwa/krypto431/pkg/kenc"
-	"github.com/sa6mwa/krypto431/pkg/keystore/keydummy"
+	"github.com/sa6mwa/krypto431/pkg/keystore/dummykey"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCodec(t *testing.T) {
 	//decStore := keydir.New("C:\\dev\\kryptotest\\keys_dec")
-	decStore := keydummy.New()
+	decStore := dummykey.New()
 	err := decStore.Open()
 	assert.NoError(t, err)
 	defer func() {
@@ -39,7 +39,7 @@ func TestCodec(t *testing.T) {
 	}
 
 	//encStore := keydir.New("C:\\dev\\kryptotest\\keys_enc")
-	encStore := keydummy.New()
+	encStore := dummykey.New()
 	err = encStore.Open()
 	assert.NoError(t, err)
 	defer func() {
@@ -81,8 +81,8 @@ func TestCodec(t *testing.T) {
 	bufLen := len(encBuf.Bytes())
 	//fmt.Println("BUF:", encBuf.String())
 	n, err := io.Copy(dec, encBuf)
-	assert.Equal(t, bufLen, int(n))
 	assert.NoError(t, err)
+	assert.Equal(t, bufLen, int(n))
 	err = dec.Close()
 	assert.NoError(t, err)
 
