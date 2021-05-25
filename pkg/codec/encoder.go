@@ -12,11 +12,12 @@ const chunkLen = 5
 const reservedKeyLen = 16
 
 type Encoder struct {
-	enc       encoderState
-	section   Section
-	w         io.Writer
-	encrypter kenc.Encrypter
-	curKey    keystore.Key
+	enc        encoderState
+	section    Section
+	w          io.Writer
+	encrypter  kenc.Encrypter
+	curKey     keystore.Key
+	writeState encoderState
 }
 
 type encoderState struct {
@@ -99,7 +100,7 @@ func (e *Encoder) endOfTransmission() error {
 
 // encodeString encodes a UTF-8 string into the stream
 func (e *Encoder) encodeString(msg string) error {
-	out, err := e.encodeStringToBuf(msg)
+	out, err := e.encodeStringToBuf(&e.enc, msg)
 	if err != nil {
 		return err
 	}
@@ -111,7 +112,7 @@ func (e *Encoder) encodeString(msg string) error {
 }
 
 // encodeString encodes a UTF-8 string into the stream
-func (e *Encoder) encodeStringToBuf(msg string) ([]byte, error) {
+func (e *Encoder) encodeStringToBuf(state *encoderState, msg string) ([]byte, error) {
 	var out []byte
 	for _, r := range msg {
 		var ch rune = DummyCh
@@ -119,16 +120,20 @@ func (e *Encoder) encodeStringToBuf(msg string) ([]byte, error) {
 		var err error
 		var altsOut []byte
 		if idx = runeIndex(CharTableAU, r); idx >= 0 {
-			altsOut = e.applyEncAlts(false, false, false)
+			altsOut = state.modifyAndGetBytes(encoderState{false, false, false})
+			//altsOut = e.applyEncAlts(false, false, false)
 			ch = []rune(CharTableAU)[idx]
 		} else if idx = runeIndex(CharTableAL, r); idx >= 0 {
-			altsOut = e.applyEncAlts(false, true, false)
+			//altsOut = e.applyEncAlts(false, true, false)
+			altsOut = state.modifyAndGetBytes(encoderState{false, true, false})
 			ch = []rune(CharTableAU)[idx]
 		} else if idx = runeIndex(CharTableBU, r); idx >= 0 {
-			altsOut = e.applyEncAlts(true, false, false)
+			//altsOut = e.applyEncAlts(true, false, false)
+			altsOut = state.modifyAndGetBytes(encoderState{true, false, false})
 			ch = []rune(CharTableAU)[idx]
 		} else if idx = runeIndex(CharTableBL, r); idx >= 0 {
-			altsOut = e.applyEncAlts(true, true, false)
+			//altsOut = e.applyEncAlts(true, true, false)
+			altsOut = state.modifyAndGetBytes(encoderState{true, true, false})
 			ch = []rune(CharTableAU)[idx]
 		}
 		out = append(out, altsOut...)
@@ -138,22 +143,26 @@ func (e *Encoder) encodeStringToBuf(msg string) ([]byte, error) {
 		}
 		switch r {
 		case '\n':
-			altsOut = e.applyEncAlts(false, true, false)
+			//altsOut = e.applyEncAlts(false, true, false)
+			altsOut = state.modifyAndGetBytes(encoderState{false, true, false})
 			out = append(out, altsOut...)
 			out = append(out, NewLineCh)
 			continue
 		case '\a':
-			altsOut = e.applyEncAlts(true, true, false)
+			//altsOut = e.applyEncAlts(true, true, false)
+			altsOut = state.modifyAndGetBytes(encoderState{true, true, false})
 			out = append(out, altsOut...)
 			out = append(out, BellCh)
 			continue
 		case '\t':
-			altsOut = e.applyEncAlts(true, true, false)
+			//altsOut = e.applyEncAlts(true, true, false)
+			altsOut = state.modifyAndGetBytes(encoderState{true, true, false})
 			out = append(out, altsOut...)
 			out = append(out, TabCh)
 			continue
 		}
-		altsOut = e.applyEncAlts(true, e.enc.isShift, true)
+		//altsOut = e.applyEncAlts(true, e.enc.isShift, true)
+		altsOut = state.modifyAndGetBytes(encoderState{true, state.isShift, true})
 		out = append(out, altsOut...)
 		bs, err := encodeHex([]byte(string(r)))
 		if err != nil {
@@ -215,68 +224,82 @@ func (e *Encoder) applyEncAlts(useAltTable, useShifted, useHexMode bool) []byte 
 func (e *Encoder) write(p []byte) (int, error) {
 	var err error
 	if e.encrypter != nil {
-		bytesWritten := 0
-		writeBytesLeft := len(p)
-
 		if e.curKey == nil {
 			// First time we don't have a key (in the beginning of the stream)
 			e.curKey, err = e.encrypter.GetNextKey()
 			if err != nil {
 				return 0, fmt.Errorf("error getting next key: %w", err)
 			}
+			e.curKey, err = e.encrypter.OpenKey(e.curKey.Name())
+			if err != nil {
+				return 0, fmt.Errorf("error opening key: %w", err)
+			}
 			// First time we write the key un-encrypted
-			oldState := e.enc
-			//keyOut := e.applyEncAlts(true, e.enc.isShift, false)
-			keyOut := []byte{'Z'}
+
+			keyOut := e.writeState.modifyAndGetBytes(encoderState{true, false, false})
 			keyOut = append(keyOut, KeyModeCh) // begin
-			keyData, err := e.encodeStringToBuf(e.curKey.Name())
+			keyData, err := e.encodeStringToBuf(&e.writeState, e.curKey.Name())
 			if err != nil {
 				return 0, fmt.Errorf("encode error: %w", err)
 			}
 			keyOut = append(keyOut, keyData...)
 			//alts := e.applyEncAlts(true, e.enc.isShift, false)
-			alts := []byte{'Z'}
+			alts := e.writeState.modifyAndGetBytes(encoderState{true, e.writeState.isShift, false})
 			keyOut = append(keyOut, alts...)
 			keyOut = append(keyOut, KeyModeCh) // end
+			// Reset the state to the start state
 			_, err = e.w.Write(keyOut)
 			if err != nil {
 				return 0, fmt.Errorf("key write error: %w", err)
 			}
-			alts = e.applyEncAlts(oldState.isAlt, oldState.isShift, oldState.isHex)
-			if len(alts) > 0 {
-				p = append(alts, p...) // prepend
-				writeBytesLeft += len(alts)
+			alts = e.writeState.modifyAndGetBytes(encoderState{false, false, false})
+			_, err = e.encrypter.Write(alts)
+			if err != nil {
+				return 0, fmt.Errorf("write error: %w", err)
 			}
 		}
 
+		bytesWritten := 0
+		writeBytesLeft := len(p)
 		for writeBytesLeft > 0 {
 			if e.curKey.BytesLeft() <= reservedKeyLen {
 				e.curKey, err = e.encrypter.GetNextKey()
 				if err != nil {
 					return 0, fmt.Errorf("error getting next key: %w", err)
 				}
-				oldState := e.enc
-				keyOut := e.applyEncAlts(true, e.enc.isShift, false)
+				oldState := e.writeState
+				//keyOut := e.applyEncAlts(true, e.enc.isShift, false)
+				keyOut := e.writeState.modifyAndGetBytes(encoderState{true, e.writeState.isShift, false})
 				keyOut = append(keyOut, KeyModeCh) // begin
-				keyData, err := e.encodeStringToBuf(e.curKey.Name())
+				keyData, err := e.encodeStringToBuf(&e.writeState, e.curKey.Name())
 				if err != nil {
 					return 0, fmt.Errorf("encode error: %w", err)
 				}
 				keyOut = append(keyOut, keyData...)
-				alts := e.applyEncAlts(true, e.enc.isShift, false)
+				//alts := e.applyEncAlts(true, e.enc.isShift, false)
+				alts := e.writeState.modifyAndGetBytes(encoderState{true, e.writeState.isShift, false})
 				keyOut = append(keyOut, alts...)
 				keyOut = append(keyOut, KeyModeCh) // end
-				alts = e.applyEncAlts(oldState.isAlt, oldState.isShift, oldState.isHex)
-				keyOut = append(keyOut, alts...)
 				keyOutLen := len(keyOut)
 				if keyOutLen > reservedKeyLen {
 					return 0, fmt.Errorf("reserved key length too short to write next key name")
 				}
-				p = append(keyOut, p...) // prepend
-				writeBytesLeft += keyOutLen
+				_, err = e.encrypter.Write(keyOut)
+				if err != nil {
+					return 0, fmt.Errorf("write error: %w", err)
+				}
+				e.curKey, err = e.encrypter.OpenKey(e.curKey.Name())
+				if err != nil {
+					return 0, fmt.Errorf("error opening key: %w", err)
+				}
+				alts = e.writeState.modifyAndGetBytes(oldState)
+				p = append(alts, p...)
+				writeBytesLeft += len(alts)
 			}
 			writeSize := minInt(writeBytesLeft, e.curKey.BytesLeft()-reservedKeyLen)
-			n, err := e.encrypter.Write(p[:writeSize])
+			writeP := p[:writeSize]
+			e.writeState.setFromBytes(writeP)
+			n, err := e.encrypter.Write(writeP)
 			p = p[n:]
 			writeBytesLeft -= n
 			bytesWritten += n
@@ -307,4 +330,49 @@ func encodeHex(msg []byte) ([]byte, error) {
 		j += 2
 	}
 	return ret, nil
+}
+
+func (s *encoderState) modifyAndGetBytes(new encoderState) []byte {
+	var out []byte
+	if (new.isShift && !s.isShift) || (!new.isShift && s.isShift) {
+		if !s.isAlt {
+			out = append(out, SwitchTableCh)
+			s.isAlt = true
+		}
+		out = append(out, ShiftModeCh)
+		s.isShift = new.isShift
+	}
+	if (new.isHex && !s.isHex) || (!new.isHex && s.isHex) {
+		if !s.isAlt {
+			out = append(out, SwitchTableCh)
+			s.isAlt = true
+		}
+		out = append(out, HexModeCh)
+		s.isHex = new.isHex
+	}
+	if (new.isAlt && !s.isAlt) || (!new.isAlt && s.isAlt) {
+		out = append(out, SwitchTableCh)
+		s.isAlt = new.isAlt
+	}
+	return out
+}
+
+func (s *encoderState) setFromBytes(p []byte) {
+	for _, b := range p {
+		switch b {
+		case SwitchTableCh:
+			s.isAlt = !s.isAlt
+			continue
+		}
+		if s.isAlt {
+			switch b {
+			case HexModeCh:
+				s.isHex = !s.isHex
+				continue
+			case ShiftModeCh:
+				s.isShift = !s.isShift
+				continue
+			}
+		}
+	}
 }

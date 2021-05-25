@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"sync"
 
 	"github.com/sa6mwa/krypto431/pkg/codec"
@@ -45,9 +46,9 @@ func runDemo1(c *cli.Context) error {
 	fmt.Printf("Encoded message:      %s\n", bufB.String())
 	fmt.Printf("Output message:  %s\n", bufA.String())
 	key, _ := dummyStore.NextKey()
-	keyBytes := make([]byte, bufB.Len())
-	io.ReadAtLeast(key, keyBytes, bufB.Len())
-	fmt.Printf("Key used:             %s\n", string(keyBytes))
+	keyBytes := make([]byte, bufB.Len()+1)
+	io.ReadAtLeast(key, keyBytes, len(keyBytes))
+	fmt.Printf("Key used:            %s\n", string(keyBytes))
 
 	decoder := codec.NewDecoder(decrypter)
 	var wg sync.WaitGroup
@@ -55,12 +56,18 @@ func runDemo1(c *cli.Context) error {
 	go func() {
 		defer wg.Done()
 		for msg := range decoder.MsgC() {
-			msgData, _ := io.ReadAll(msg)
+			msgData, err := io.ReadAll(msg)
+			if err != nil {
+				log.Printf("Read error: %v", err)
+			}
 			fmt.Printf("Decoded message:      %s\n", string(msgData))
 		}
 	}()
 
-	io.Copy(decoder, bufA)
+	_, err := io.Copy(decoder, bufA)
+	if err != nil {
+		return err
+	}
 	decoder.Close()
 	wg.Wait()
 

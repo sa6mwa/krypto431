@@ -74,6 +74,7 @@ func TestEncoder(t *testing.T) {
 
 	enc.Close()
 	fmt.Println(buf.String())
+	//t.Fail()
 }
 
 type debugWriter struct {

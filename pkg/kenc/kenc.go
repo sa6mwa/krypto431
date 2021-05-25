@@ -55,12 +55,11 @@ func (e *encDec) Write(p []byte) (int, error) {
 
 // GetNextKey assigns and returns the key to be used on the next write(s)
 func (e *encDec) GetNextKey() (keystore.Key, error) {
-	var err error
-	e.curKey, err = e.store.NextKey()
+	key, err := e.store.NextKey()
 	if err != nil {
 		return nil, fmt.Errorf("key error: %w", err)
 	}
-	return e.curKey, nil
+	return key, nil
 }
 
 // OpenKey assigns and returns the specified key to be used on the next write(s)

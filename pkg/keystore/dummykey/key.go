@@ -1,4 +1,6 @@
-package keydummy
+package dummykey
+
+import "io"
 
 type Key struct {
 	buf []byte
@@ -6,10 +8,10 @@ type Key struct {
 
 const keySize = 256
 
-func newKey() *Key {
+func newKey(keyChar byte) *Key {
 	buf := make([]byte, keySize)
 	for i := 0; i < keySize; i++ {
-		buf[i] = 'A'
+		buf[i] = keyChar
 	}
 	return &Key{
 		buf: buf,
@@ -25,6 +27,9 @@ func (k *Key) BytesLeft() int {
 }
 
 func (k *Key) Read(p []byte) (int, error) {
+	if len(k.buf) == 0 {
+		return 0, io.EOF
+	}
 	n := copy(p, k.buf)
 	k.buf = k.buf[n:]
 	return n, nil

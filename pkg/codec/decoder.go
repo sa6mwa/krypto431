@@ -37,6 +37,7 @@ func (m *Decoder) MsgC() chan *ReceivedMessage {
 
 // Write writes data into the decoder so they can be processed
 func (m *Decoder) Write(p []byte) (int, error) {
+	decBuf := make([]byte, 1)
 loop:
 	for _, b := range p {
 		if b < 'A' || b > 'Z' {
@@ -49,7 +50,6 @@ loop:
 			if err != nil {
 				return 0, fmt.Errorf("decrypt write error: %w", err)
 			}
-			decBuf := make([]byte, 1)
 			_, err = m.decrypter.Read(decBuf)
 			if err != nil {
 				return 0, fmt.Errorf("decrypt read error: %w", err)
@@ -134,7 +134,6 @@ loop:
 			case KeyModeCh:
 				m.dec.isKey = !m.dec.isKey
 				isKeyMode := m.curMsg.toggleKeyMode()
-				fmt.Println("isKeyMode", isKeyMode)
 				if !isKeyMode && m.decrypter != nil {
 					m.curKey = m.curMsg.getCurKey()
 					_, err := m.decrypter.OpenKey(m.curKey)

@@ -75,11 +75,6 @@ func (r *ReceivedMessage) Read(p []byte) (int, error) {
 }
 
 func (r *ReceivedMessage) setSection(section Section) error {
-	s := ""
-	if section != 0 {
-		s = string(section)
-	}
-	fmt.Println("SET SECTION", s)
 	r.sectionMode = false
 	r.section = section
 	r.msgBuf2[section] = nil
@@ -87,17 +82,11 @@ func (r *ReceivedMessage) setSection(section Section) error {
 }
 
 func (r *ReceivedMessage) closeSection(section Section) error {
-	s := ""
-	if r.section != 0 {
-		s = string(r.section)
-	}
-	fmt.Println("CLOSE SECTION", s)
 	r.section = SectionDefault
 	var err error
 	switch section {
 	case SectionChecksum:
 	case SectionHeader:
-		fmt.Println("HEADER: ", string(r.msgBuf2[section]))
 		err = r.Header.Read(string(r.msgBuf2[section]))
 		r.msgBuf2[section] = nil
 		r.hasHeader = true
@@ -107,7 +96,6 @@ func (r *ReceivedMessage) closeSection(section Section) error {
 }
 
 func (r *ReceivedMessage) setSectionMode() {
-	fmt.Println("SECTION MODE")
 	if r.section != SectionDefault {
 		r.closeSection(r.section)
 	} else {
@@ -176,7 +164,6 @@ func (r *ReceivedMessage) append(b ...byte) {
 	if b == nil {
 		return
 	}
-	fmt.Println("APPEND", r.keyMode, string(b))
 	if r.keyMode {
 		r.keyBuf = append(r.keyBuf, b...)
 		return

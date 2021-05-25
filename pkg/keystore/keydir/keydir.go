@@ -17,6 +17,7 @@ type KeyDir struct {
 	dir     string
 	keys    []*Key
 	openKey *Key
+	keyIdx  int
 }
 
 const keyExt = ".key"
@@ -54,6 +55,7 @@ func (k *KeyDir) Close() error {
 		k.openKey = nil
 	}
 	k.keys = nil
+	k.keyIdx = 0
 	return nil
 }
 
@@ -63,12 +65,10 @@ func (k *KeyDir) NextKey() (keystore.Key, error) {
 	if len(k.keys) == 0 {
 		return nil, keystore.ErrNoMoreKeys
 	}
-	key := k.keys[0]
-	k.keys = k.keys[1:]
-	err := k.loadKey(key)
-	if err != nil {
-		return nil, fmt.Errorf("error loading key '%s': %w", key.name, err)
+	if k.keyIdx >= len(k.keys) {
+		k.keyIdx = 0
 	}
+	key := k.keys[k.keyIdx]
 	return key, nil
 }
 
@@ -94,6 +94,7 @@ func (k *KeyDir) OpenKey(name string) (keystore.Key, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error loading key '%s': %w", name, err)
 	}
+	k.keyIdx = idxFound + 1
 	return key, nil
 }
 

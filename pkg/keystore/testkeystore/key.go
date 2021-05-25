@@ -1,5 +1,7 @@
 package testkeystore
 
+import "io"
+
 type Key struct {
 	buf  []byte
 	name string
@@ -23,6 +25,9 @@ func (k *Key) BytesLeft() int {
 }
 
 func (k *Key) Read(p []byte) (int, error) {
+	if len(k.buf) == 0 {
+		return 0, io.EOF
+	}
 	n := copy(p, k.buf)
 	k.buf = k.buf[n:]
 	return n, nil

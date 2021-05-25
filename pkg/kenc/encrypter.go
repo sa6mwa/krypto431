@@ -10,6 +10,7 @@ type Encrypter interface {
 	Read(p []byte) (int, error)
 	Write(p []byte) (int, error)
 	GetNextKey() (keystore.Key, error)
+	OpenKey(name string) (keystore.Key, error)
 	Close() error
 }
 

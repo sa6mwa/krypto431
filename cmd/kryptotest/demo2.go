@@ -3,17 +3,34 @@ package main
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/sa6mwa/krypto431/pkg/codec"
 	"github.com/sa6mwa/krypto431/pkg/kenc"
-	"github.com/sa6mwa/krypto431/pkg/keystore/keydummy"
+	"github.com/sa6mwa/krypto431/pkg/keystore/testkeystore"
 	"github.com/urfave/cli/v2"
 )
+
+/*
+Encoded message: ZXAHXZCTQPNGQFNQTESTZPZPNGQTNRQZCFBDDCXAWIJFAEOEHANAKBKAKAAAAAAANEJEIEEFCAAAAAAAIAAAAAAAIAIACAAAAAAELGNCJNMAAAAAAABHDFCEHECAAKOMOBMOJAAAAAAAEGHEBENEBAAAALBIPALPMGBAFAAAAAAAJHAEIFJHDAAAAAOMDAAAAAOMDABMHGPKIGEAAAAAABKHEEFFIHEFDGPGGHEHHGBHCGFAAFAGBGJGOHECOEOEFFECAHGDDCODFCODBDADAPEHCKBAAAAAAEBEJEEEBFEBIFHGFIMEJAKAADAAIADHDBBHKPBPPMPLFEGEFLLAEFKGFEGACBDLFCPFIAGMONLDJOFBPPLLIKEFMGKHKEEJLHKEGJABOJNCFOGLGDLPJIOAGCGBMFOJKBBNNJGMCKADBBNLLIFDNAAAAAAAAEJEFEOEEKOECGAICWACWFNOJPKIKWAEF
+
+Output message: ZYZDUMMYZYZZXAHXZCTQPNGQFNQTESTZPZPNGQTNRQZCFBDDCXAWIJFAEOEHANAKBKAKAAAAAAANEJEIEEFCAAAAAAAIAAAAAAAIAIACAAAAAAELGNCJNMAAAAAAABHDFCEHECAAKOMOBMOJAAAAAAAEGHEBENEBAAAALBIPALPMGBAFAAAAAAAJHAEIFJHDAAAAAOMDAAAAAOMDABMHGPKIGEAAAAAABKHEEFFIHEFDGPGGHEHHGBHCGFWYXZDUMMYZYXWAAFAGBGJGOHECOEOEFFECAHGDDCODFCODBDADAPEHCKBAAAAAAEBEJEEEBFEBIFHGFIMEJAKAADAAIADHDBBHKPBPPMPLFEGEFLLAEFKGFEGACBDLFCPFIAGMONLDJOFBPPLLIKEFMGKHKEEJLHKEGJABOJNCFOGLGDLPJIOAGCGBMFOJKBBNNJGMCKADBBNLLIFDNAAAAAAAAEJEFEOEEKOECGAICWACWFWYXZDUMMYZYXWNOJPKIKWAEF
+
+ZYZDUMMYZYZZXAHXZCTQPNGQFNQTESTZPZPNGQTNRQZCFBDDCXAWIJFAEOEHANAKBKAKAAAAAAANEJEIEEFCAAAAAAAIAAAAAAAIAIACAAAAAAELGNCJNMAAAAAAABHDFCEHECAAKOMOBMOJAAAAAAAEGHEBENEBAAAALBIPALPMGBAFAAAAAAAJHAEIFJHDAAAAAOMDAAAAAOMDABMHGPKIGEAAAAAABKHEEFFIHEFDGPGGHEHHGBHCGFWYXZDUMMYZYXWAAFAGBGJGOHECOEOEFFECAHGDDCODFCODBDADAPEHCKBAAAAAAEBEJEEEBFEBIFHGFIMEJAKAADAAIADHDBBHKPBPPMPLFEGEFLLAEFKGFEGACBDLFCPFIAGMONLDJOFBPPLLIKEFMGKHKEEJLHKEGJABOJNCFOGLGDLPJIOAGCGBMFOJKBBNNJGMCKADBBNLLIFDNAAAAAAAAEJEFEOEEKOECGAICWACWFWYXZDUMMYZYXWNOJPKIKWAEFHeaders:
+  CT: PNG
+  FN: TEST.PNG
+  TNR: 251332
+CRC OK: true
+
+
+*/
 
 const img = "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAadEVYdFNvZnR3YXJlAFBhaW50Lk5FVCB2My41LjEwMPRyoQAAAEFJREFUGFdljEkKADAIA3MRevH/z7VGRbsEWmVGAhO1L1gGzts55R/7uKRcanpEm3pGkB6dJea2O/mOBiYcXpoR3ZbCoDEdu4U9AAAAAElFTkSuQmCC"
 
@@ -21,7 +38,9 @@ func runDemo2(c *cli.Context) error {
 	// Dummy store is just used to print the key data
 	// This is only possible since we are using a "non-random" random key
 	// The testkeystore will always return the same key data
-	store := keydummy.New()
+	store := testkeystore.New()
+	//store := dummykey.New()
+	//store.SetKeyChar('Z')
 	defer store.Close()
 
 	encrypter := kenc.NewEncrypter(store)
@@ -53,8 +72,8 @@ func runDemo2(c *cli.Context) error {
 	msgB.Close()
 	encoderA.Close()
 	encoderB.Close()
-	fmt.Printf("Encoded message: %s\n", bufB.String())
-	fmt.Printf("Output message: %s\n", bufA.String())
+	fmt.Printf("Encoded message: %s\n\n", bufB.String())
+	fmt.Printf("Output message: %s\n\n", bufA.String())
 
 	decoder := codec.NewDecoder(decrypter)
 	var wg sync.WaitGroup
@@ -65,9 +84,25 @@ func runDemo2(c *cli.Context) error {
 			msgData, _ := ioutil.ReadAll(msg)
 			fmt.Println("Headers:")
 			for _, key := range msg.Header.Keys() {
-				fmt.Printf("  %s: %s", key, msg.Header.Get(key))
+				fmt.Printf("  %s: %s\n", key, msg.Header.Get(key))
 			}
-			fmt.Printf("Decoded message: %s\n", string(msgData))
+			fmt.Printf("CRC OK: %t\n", msg.VerifyChecksum())
+			fmt.Println()
+			fmt.Printf("Decoded message (hex coded): %s\n\n", hex.EncodeToString(msgData))
+			fn := msg.Header.Get(codec.HeaderFilename)
+			fmt.Println("Writing sample data to:", fn)
+			f, err := os.Create(fn)
+			if err != nil {
+				log.Printf("Error creating output file: %v", err)
+			}
+			_, err = f.Write(msgData)
+			if err != nil {
+				log.Printf("Error writing to output file: %v", err)
+			}
+			err = f.Close()
+			if err != nil {
+				log.Printf("Error closing output file: %v", err)
+			}
 		}
 	}()
 

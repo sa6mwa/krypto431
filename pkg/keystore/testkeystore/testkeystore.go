@@ -31,9 +31,6 @@ func (d *TestKeyStore) Close() error {
 }
 
 func (d *TestKeyStore) NextKey() (keystore.Key, error) {
-	defer func() {
-		d.nextKey++
-	}()
 	keyId := d.nextKey
 	offset := keyId * keySize
 	err := d.ensureRndBuf(offset)

@@ -27,7 +27,6 @@ func TestCodec(t *testing.T) {
 		err := decrypter.Close()
 		assert.NoError(t, err)
 	}()
-
 	dec := NewDecoder(decrypter)
 
 	encMessages := []string{
@@ -80,6 +79,7 @@ func TestCodec(t *testing.T) {
 	assert.NoError(t, err)
 
 	bufLen := len(encBuf.Bytes())
+	//fmt.Println("BUF:", encBuf.String())
 	n, err := io.Copy(dec, encBuf)
 	assert.Equal(t, bufLen, int(n))
 	assert.NoError(t, err)
@@ -88,9 +88,9 @@ func TestCodec(t *testing.T) {
 
 	wg.Wait()
 
-	/*for i, decMessage := range decMessages {
-		fmt.Printf("%d: '%s'\n", i, decMessage)
+	for i, decMessage := range decMessages {
+		//fmt.Printf("%d: '%s'\n", i, decMessage)
 		assert.Equal(t, encMessages[i], decMessage)
 	}
-	t.Fail()*/
+	//t.Fail()
 }
