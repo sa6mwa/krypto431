@@ -56,8 +56,8 @@ func runDemo2(c *cli.Context) error {
 	// The encoder will write output data to the buffer
 	encoderA := codec.NewEncoder(bufA, encrypter)
 	encoderB := codec.NewEncoder(bufB, nil)
-	msgA := encoderA.NewMessage()
-	msgB := encoderB.NewMessage()
+	msgA, _ := encoderA.NewMessage()
+	msgB, _ := encoderB.NewMessage()
 	msgA.WithCRC32()
 	msgA.WithContentType("PNG")
 	msgA.WithFilename("TEST.PNG")

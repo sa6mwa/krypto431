@@ -33,8 +33,8 @@ func runDemo1(c *cli.Context) error {
 	// The encoder will write output data to the buffer
 	encoderA := codec.NewEncoder(bufA, encrypter)
 	encoderB := codec.NewEncoder(bufB, nil)
-	msgA := encoderA.NewMessage()
-	msgB := encoderB.NewMessage()
+	msgA, _ := encoderA.NewMessage()
+	msgB, _ := encoderB.NewMessage()
 	inMsg := "THIS IS A TEST MESSAGE"
 	msgA.WriteString(inMsg)
 	msgB.WriteString(inMsg)

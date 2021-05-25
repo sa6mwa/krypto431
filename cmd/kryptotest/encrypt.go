@@ -41,7 +41,7 @@ func runEncrypt(c *cli.Context) error {
 	buf := bytes.NewBuffer(nil)
 	encoder := codec.NewEncoder(buf, encrypter)
 
-	msgEncoder := encoder.NewMessage()
+	msgEncoder, _ := encoder.NewMessage()
 	err = msgEncoder.WriteString(msg)
 	if err != nil {
 		return fmt.Errorf("error writing message: %w", err)
