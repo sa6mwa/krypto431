@@ -66,9 +66,12 @@ func (d *TestKeyStore) ensureRndBuf(offset int) error {
 	missingBytes := len(d.rndBytes) - offset + keySize
 	if missingBytes > 0 {
 		buf := make([]byte, missingBytes)
-		_, err := io.ReadAtLeast(d.rng, buf, missingBytes)
+		n, err := io.ReadAtLeast(d.rng, buf, missingBytes)
 		if err != nil {
 			return err
+		}
+		for i := 0; i < n; i++ {
+			buf[i] = byte(int(buf[i])%26) + byte('A')
 		}
 		d.rndBytes = append(d.rndBytes, buf...)
 	}

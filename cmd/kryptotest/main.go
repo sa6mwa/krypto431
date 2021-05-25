@@ -20,6 +20,14 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			{
+				Name:   "demo1",
+				Action: runDemo1,
+			},
+			{
+				Name:   "demo2",
+				Action: runDemo2,
+			},
+			{
 				Name:   "encrypt",
 				Action: runEncrypt,
 			},

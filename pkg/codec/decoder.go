@@ -134,6 +134,7 @@ loop:
 			case KeyModeCh:
 				m.dec.isKey = !m.dec.isKey
 				isKeyMode := m.curMsg.toggleKeyMode()
+				fmt.Println("isKeyMode", isKeyMode)
 				if !isKeyMode && m.decrypter != nil {
 					m.curKey = m.curMsg.getCurKey()
 					_, err := m.decrypter.OpenKey(m.curKey)

@@ -9,7 +9,7 @@ import (
 )
 
 const chunkLen = 5
-const reservedKeyLen = 12
+const reservedKeyLen = 16
 
 type Encoder struct {
 	enc       encoderState
@@ -226,14 +226,16 @@ func (e *Encoder) write(p []byte) (int, error) {
 			}
 			// First time we write the key un-encrypted
 			oldState := e.enc
-			keyOut := e.applyEncAlts(true, e.enc.isShift, false)
+			//keyOut := e.applyEncAlts(true, e.enc.isShift, false)
+			keyOut := []byte{'Z'}
 			keyOut = append(keyOut, KeyModeCh) // begin
 			keyData, err := e.encodeStringToBuf(e.curKey.Name())
 			if err != nil {
 				return 0, fmt.Errorf("encode error: %w", err)
 			}
 			keyOut = append(keyOut, keyData...)
-			alts := e.applyEncAlts(true, e.enc.isShift, false)
+			//alts := e.applyEncAlts(true, e.enc.isShift, false)
+			alts := []byte{'Z'}
 			keyOut = append(keyOut, alts...)
 			keyOut = append(keyOut, KeyModeCh) // end
 			_, err = e.w.Write(keyOut)

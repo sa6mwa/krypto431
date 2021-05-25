@@ -31,6 +31,15 @@ func (h Header) Del(key string) {
 	delete(h, key)
 }
 
+func (h Header) Keys() []string {
+	var keys []string
+	for key := range h {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 // Clone returns a copy of h or nil if h is nil.
 func (h Header) Clone() Header {
 	if h == nil {
