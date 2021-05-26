@@ -6,16 +6,15 @@ import (
 	"hash"
 	"hash/crc32"
 	"io"
-	"strings"
 )
 
 type ReceivedMessage struct {
 	Header        Header
 	leftoverBytes []byte
-	hash          hash.Hash
+	checksum      hash.Hash
 	section       Section
 	sectionMode   bool
-	msgBuf2       map[Section][]byte
+	msgBuf        map[Section][]byte
 	hexBuf        []byte
 	hexMode       bool
 	hasHeader     bool
@@ -28,10 +27,10 @@ type ReceivedMessage struct {
 
 func newReceivedMessage() *ReceivedMessage {
 	return &ReceivedMessage{
-		Header:  Header{},
-		msgBuf2: map[Section][]byte{},
-		readC:   make(chan []byte),
-		hash:    crc32.NewIEEE(),
+		Header:   Header{},
+		msgBuf:   map[Section][]byte{},
+		readC:    make(chan []byte),
+		checksum: crc32.NewIEEE(),
 	}
 }
 
@@ -40,23 +39,17 @@ func (r *ReceivedMessage) HasHeader() bool {
 }
 
 func (r *ReceivedMessage) HasChecksum() bool {
-	return len(r.msgBuf2[SectionChecksum]) > 0 && r.hash != nil
+	return len(r.msgBuf[SectionChecksum]) > 0 && r.checksum != nil
 }
 
 func (r *ReceivedMessage) VerifyChecksum() bool {
 	return r.HasChecksum() &&
-		bytes.Equal(r.hash.Sum(nil), r.msgBuf2[SectionChecksum])
+		bytes.Equal(r.checksum.Sum(nil), r.msgBuf[SectionChecksum])
 }
 
 func (r *ReceivedMessage) IsText() bool {
 	if r.Header.Has(HeaderContentType) {
-		dataType := strings.ToLower(r.Header.Get(HeaderContentType))
-		return strings.HasPrefix(dataType, "text") ||
-			dataType == "application/json" ||
-			dataType == "application/xml" ||
-			dataType == "json" ||
-			dataType == "txt" ||
-			dataType == "xml"
+		return contentTypeIsText(r.Header.Get(HeaderContentType))
 	}
 	return true
 }
@@ -77,7 +70,7 @@ func (r *ReceivedMessage) Read(p []byte) (int, error) {
 func (r *ReceivedMessage) setSection(section Section) error {
 	r.sectionMode = false
 	r.section = section
-	r.msgBuf2[section] = nil
+	r.msgBuf[section] = nil
 	return nil
 }
 
@@ -87,8 +80,8 @@ func (r *ReceivedMessage) closeSection(section Section) error {
 	switch section {
 	case SectionChecksum:
 	case SectionHeader:
-		err = r.Header.Read(string(r.msgBuf2[section]))
-		r.msgBuf2[section] = nil
+		err = r.Header.Read(string(r.msgBuf[section]))
+		r.msgBuf[section] = nil
 		r.hasHeader = true
 	case SectionDefault:
 	}
@@ -129,13 +122,13 @@ func (r *ReceivedMessage) getCurKey() string {
 }
 
 func (r *ReceivedMessage) flush() error {
-	if len(r.msgBuf2[SectionDefault]) > 0 {
-		b := r.msgBuf2[SectionDefault]
-		if r.hash != nil {
-			r.hash.Write(b)
+	if len(r.msgBuf[SectionDefault]) > 0 {
+		b := r.msgBuf[SectionDefault]
+		if r.checksum != nil {
+			r.checksum.Write(b)
 		}
 		r.readC <- b
-		r.msgBuf2[SectionDefault] = nil
+		r.msgBuf[SectionDefault] = nil
 	}
 	return r.flushHex()
 }
@@ -168,7 +161,7 @@ func (r *ReceivedMessage) append(b ...byte) {
 		r.keyBuf = append(r.keyBuf, b...)
 		return
 	}
-	r.msgBuf2[r.section] = append(r.msgBuf2[r.section], b...)
+	r.msgBuf[r.section] = append(r.msgBuf[r.section], b...)
 }
 
 func (r *ReceivedMessage) appendHex(b ...byte) {

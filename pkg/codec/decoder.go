@@ -32,7 +32,6 @@ func (d *Decoder) MsgC() chan *ReceivedMessage {
 // Write writes data into the decoder so they can be processed
 func (d *Decoder) Write(p []byte) (int, error) {
 	decBuf := make([]byte, 1)
-loop:
 	for _, b := range p {
 		if b < 'A' || b > 'Z' {
 			continue
@@ -98,7 +97,7 @@ loop:
 							return 0, fmt.Errorf("error closing message: %w", err)
 						}
 					}
-					break loop
+					continue
 				}
 			}
 		}

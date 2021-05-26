@@ -101,9 +101,7 @@ func (m *MessageWriter) writeHeader() (bool, error) {
 	}
 	if m.contentType != "" {
 		m.Header.Set(HeaderContentType, m.contentType)
-		if !strings.HasPrefix(m.contentType, "TEXT/") {
-			sendAsBytes = true
-		}
+		sendAsBytes = !contentTypeIsText(m.contentType)
 	}
 	err := m.Header.Write(headerBuf)
 	if err != nil {

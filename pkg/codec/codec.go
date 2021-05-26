@@ -1,6 +1,9 @@
 package codec
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 var (
 	ErrInvalidMsgData = fmt.Errorf("invalid msg data, only A-Z allowed")
@@ -94,4 +97,20 @@ func runeIndex(s string, r rune) int {
 		}
 	}
 	return -1
+}
+
+func contentTypeIsText(contentType string) bool {
+	if contentType == "" {
+		return false
+	}
+
+	contentType = strings.ToLower(contentType)
+	return strings.HasPrefix(contentType, "text") ||
+		contentType == "application/json" ||
+		contentType == "application/xml" ||
+		contentType == "application/xhtml+xml" ||
+		contentType == "json" ||
+		contentType == "txt" ||
+		contentType == "image/svg+xml" ||
+		contentType == "xml"
 }
