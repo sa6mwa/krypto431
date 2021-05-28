@@ -17,13 +17,13 @@ import (
 // new source like with math/rand, but this will have to change if we add
 // another PRNG. The API should then be backward compatible with the
 // crypto/rand implementation as default.
-var gsrc cryptoRandSource
+var gsrc = cryptoRandSource{&sync.Mutex{}}
 var gr = rand.New(gsrc)
 
 // Not sure if we want to export some of these structs in the future, but
 // currently the package only exports the primary functionality.
 type cryptoRandSource struct {
-	mu sync.Mutex
+	*sync.Mutex
 }
 
 func (s cryptoRandSource) Seed(seed int64) {
@@ -33,19 +33,19 @@ func (s cryptoRandSource) Int63() int64 {
 	return int64(s.Uint64() & ^uint64(1<<63))
 }
 func (s cryptoRandSource) Uint64() (v uint64) {
-	s.mu.Lock()
+	s.Lock()
 	err := binary.Read(cryptoRand.Reader, binary.BigEndian, &v)
 	if err != nil {
 		panic(err)
 	}
-	s.mu.Unlock()
+	s.Unlock()
 	return // automatically implies that v is returned
 }
 
 func (s cryptoRandSource) Read(p []byte) (n int, err error) {
-	s.mu.Lock()
+	s.Lock()
 	_, err = cryptoRand.Read(p)
-	s.mu.Unlock()
+	s.Unlock()
 	if err != nil {
 		return len(p), err
 	}

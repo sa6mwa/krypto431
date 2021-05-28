@@ -30,9 +30,8 @@ it and - since it's symmetric - which key to use for decrypting the ciphertext.
 The remaining ciphertext is organized into groups of 5 letters.
 
 When encrypting, you add the numerical representation of the letter (for
-example A=1) with the randomly generated number from the key. If the number is
-26 or above, you wrap it starting from 0 (modulo 26). None of the numbers in
-the key can be 0 and must only be numbers from 1 to 26.
+example A=0) with the randomly generated number from the key. If the number is
+26 or above, you wrap it starting from 0 (modulo 26).
 
 When decrypting, you subtract the random number in the key from the ciphered
 numerical representation of the letter. If the number is negative, you wrap it
@@ -40,66 +39,11 @@ around starting from 26 (or, for example 4 minus number from the key, e.g 18 =
 `(26+4-18)%26 = 12 = L`).
 
 If the encryptor has enciphered the whole message and is left with a final
-group of less than 5 letters, the encryptor should add zeroes to the plaintext
-(0, read more below) to fill up any remaining group (this is effectively
-copying the number from the key to the ciphertext until the final group is
-complete with 5 letters).
-
-## Modulo 26
-
-If you only have 26 letters and each letter represents a number from 1 to 26,
-how do you send numbers? If the encryptor simply copies the key number to the
-ciphertext (effectively adding it with zero, e.g 0+key=key), the result will be
-0 when deciphered.
-
-A single 0 indicates a space. The rule with Krypto431 is there can never be 2
-spaces in a row since that has another purpose. Krypto431 uses modulo 26, but
-`26 % 26 = 0`. When generating the key, the resulting number is incremented
-by 1 so that the key can never contain the number 0.
-
-With Krypto431, if the plaintext or deciphered number 0 appears twice, it
-instructs the decryptor to change to an alternate character table (or change
-back to the original A to Z character table) consisting of an additional 24
-characters and 2 control symbols.
-
-## Numbers and case sensitivity?
-
-Not many traditional ciphers allow you to switch case from upper to lower. It
-makes sense, there is no case in traditional modes like CW (Morse code) or
-RTTY. However, in the digital age it would be convenient to be able to send
-information such as passwords or encryption keys which is why Krypto431 is
-designed to cover all necessary characters to send base64 encoded content (even
-if the length of such a message is far from recommended). Complex passwords or
-binary data must be sent base64 encoded, there are only 2 character tables with
-a total of 50 characters - not even enough to cover the ASCII table.
-
-The 25th position in the alternate character table is an instruction to change
-the case from the default uppercase to lowercase (like pressing the CapsLock
-key). This also changes back to the primary character table (A-Z). To change
-back to uppercase you do the same thing: 0, 0, 25.
-
-## Message spans the length of several keys?
-
-The 26th position in the alternate character table instructs the decryptor that
-the next 5 numbers (letters) is a key identifier. The new key is to be used to
-decipher the letters/numbers that follow, just like a new Krypto431 ciphertext
-would start except that the key id is encrypted and not written in plaintext
-(only the first 5 letter group is plaintext and identifies the initial key for
-encryption/decryption). This is useful if your message spans more than the
-length of one key, you can simply repeat changing keys as necessary. Please
-keep in mind that you need to change key before you run out of random numbers
-in your current key (i.e there must be 6-8 numbers left when you decide to
-change key depending on which character table you are currently in (primary or
-alternate): 1-3 for the control character(s), 5 for the key identifier).
-Immediately after the key everything is reset and you start on the primary
-character table as per normal, but with the new key.
-
-## Space
-
-Space is simply 0, you copy the current random number in the key to the
-ciphertext (effectively doing 0+key=key). When the decryptor deciphers the
-position to 0 from the ciphertext, he or she enters a space in the deciphered
-message.
+group of less than 5 letters, the encryptor should add Z to the plaintext to
+fill up any remaining group as Z will be used as an operator character that
+changes the character table to and from an alternate table. Filling up with Z
+just changes the table back and forth without adding any real characters to the
+output.
 
 ## Primary character table
 
@@ -112,58 +56,13 @@ Z = Change to alternate character table
 ## Alternate character table
 
 ```
-0123456789!+,-./=?Z@ ÅÄÖX[cl][change-to-key-that-follows]
-
 0123456789ÅÄÖÆØ.Q?Z+/=,[cl][change-key][change-table]
 ABCDEFGHIJKLMNOPQRSTUVWX   Y           Z
 Z = Change to primary character table
 
-When in the primary character table you decipher the following...
-0, 0, 26
-...it means that the next 5 characters indicate which key to change to. This
-is useful if the message is longer than the length of a single key and makes it
-possible to send a long message as a single message without needing to fragment
-it into multiple message parts.
-
-If you decipher 0, 0, 25 it's like pushing the CapsLock key, you indicate that
-you want to switch the case from upper to lower and vice versa. It also means
-to switch back to the primary character table (no need to add two zeroes as you
-would do otherwise to switch back from the alternate to the primary character
-table).
 ```
 
-## Caveats - logic needed
-
 ```
-ENCRYPTION
-
- plaintext: XYZ ABC = 24, 25, 26, 0, 1, 2, 3
-       key: ZZZZZZZ = 26, 26, 26, 26, 26, 26, 26
-       sum:           50, 51, 52, 26, 27, 28, 29
-modulo26+1: YZAABCD = 25, 26, 1, 1, 2, 3, 4
-
-DECRYPTION
-
-ciphertext: YZAABCD = 25, 26, 1, 1, 2, 3, 4
-       key: ZZZZZZZ = 26, 26, 26, 26, 26, 26, 26
-  subtract:           -1, 0, -25, -25, -24, -23, -22
-modulo26-1: XY  ABC
-deciphered: XY  ABC
-
-
-SOLUTION
-
-ENCRYPTION
-
- plaintext: XYZ ABC = 24, 25, 26, 0, 1, 2, 3
-       key: ZZZZZZZ = 26, 26, 26, 26, 26, 26, 26
-       sum:           50, 51, 52, 26, 27, 28, 29
-modulo26+1: YZAABCD = 25, 26, 1, 1, 2, 3, 4
-
-ABC DEF
-ABCZZDEF
-
-
 NEW IDEA = TRUE MODULO 26, 0 to 25
 
 rule = Z is only to switch between tables, can not be used in either table.
@@ -191,23 +90,7 @@ UPK31 = UPKZD BZZZZ
 
 UTGÅ MOT UPK79 = UTGZK ZQMOT QUPKZ HJZZZ
 
-
-
-
-
-zoo = ZZZOO
-Zebra = ZZZEBRA
-
-Marxzell = MARXXZELL (nope, see above)
-Marxzell = MARXZXXZELL
-
-This is a secret message. 123. 73
-THISXISXAXSECRETXMESSAGEXZQXZXXZBCDQXZXXZHD
-
-
 ```
-
-
 
 ## Manually generating a key with dice
 
@@ -220,6 +103,20 @@ One possible solution was found
 but it needs to be described dumb-simple for numbers 0 to 25.
 [Here](https://medium.com/swlh/roll-your-own-random-number-generator-176bcd860363)
 Thomas Langkaas explains some more.
+
+```
+tldr; Use 2 cube dices (6-sided). First roll selects range of second throw.
+1  1  1  1  1  1  2  2  2  2  2  2  3  3  3  3  3  3  4  4  4  4  4  4  5  5
+1  2  3  4  5  6  1  2  3  4  5  6  1  2  3  4  5  6  1  2  3  4  5  6  1  2
+00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25
+
+If first roll of the dice is a 3 and second roll is a 4, the random number is
+15. If the first throw is a 6 you simply discard it and roll the dice again.
+Same thing if the first roll is a 5 and the second roll is 3, 4, 5 or 6 - you
+re-roll until you get either 1 or 2. If the first roll is 5 and the second
+is 1 the number is 24. If the first roll is 5 and the second is 2 the number is
+25.
+```
 
 ## Randomness
 
@@ -318,6 +215,6 @@ echo -n SA6MWA | sum -s
 431 1
 ```
 
-# Author
+# Authors
 
-SA6MWA Michel <sa6mwa@radiohorisont.se>
+See the  `AUTHORS` file.

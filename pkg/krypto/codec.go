@@ -1,4 +1,4 @@
-package krypto431
+package krypto
 
 var (
 	CharTableAU []byte = []byte(`ABCDEFGHIJKLMNOP RSTUVWXY_`)
