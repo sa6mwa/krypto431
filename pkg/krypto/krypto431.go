@@ -7,6 +7,7 @@ import (
 	"github.com/sa6mwa/krypto431/pkg/crand"
 )
 
+// Krypto431 is the interface. Each struct must have these assigned methods.
 type Krypto431 interface {
 	Wipe()
 	RandomWipe()
@@ -25,7 +26,8 @@ const (
 	useCrandWipe         bool = true
 )
 
-// main struct
+// Instance stores most of the generated keys, encoded/decoded plain and
+// ciphertext in Krypto431.
 type Instance struct {
 	Mu            *sync.Mutex
 	GroupSize     int
@@ -38,58 +40,65 @@ type Instance struct {
 	MakeTextFiles bool
 }
 
+// Key struct holds a key.
 type Key struct {
-	Id       []byte
-	Bytes    []byte
+	ID       []rune
+	Runes    []rune
 	instance *Instance
 }
 
+// PlainText holds plaintext messages and plaintext encoded text (encryption
+// flow is: Text, EncodedText, CipherText.Text.
 type PlainText struct {
 	GroupCount  int
-	KeyId       []byte
-	Text        []byte
-	EncodedText []byte
+	KeyID       []rune
+	Text        []rune
+	EncodedText []rune
 	instance    *Instance
 }
 
+// CipherText holds encrypted text ready for decryption.
 type CipherText struct {
 	GroupCount int
-	KeyId      []byte
-	Text       []byte
+	KeyID      []rune
+	Text       []rune
 	instance   *Instance
 }
 
-// Wipe(b []byte) wipes a byte slice.
-func Wipe(b []byte) {
+// Wipe wipes a rune slice.
+func Wipe(b *[]rune) {
 	if useCrandWipe {
-		RandomWipe(b)
+		err := RandomWipe(b)
+		if err != nil {
+			panic(err)
+		}
 	} else {
 		ZeroWipe(b)
 	}
 }
 
-// RandomWipe(b []byte) wipes a byte slice with random bytes.
-func RandomWipe(b []byte) error {
-	written, err := crand.Read(b)
-	if err != nil || written != len(b) {
+// RandomWipe wipes a rune slice with random runes.
+func RandomWipe(b *[]rune) error {
+	written, err := crand.ReadRunes(*b)
+	if err != nil || written != len(*b) {
 		if err != nil {
 			return err
 		}
 		ZeroWipe(b)
 	}
-	b = nil
+	*b = nil
 	return nil
 }
 
-// ZeroWipe(b []byte) wipes a byte slice with zeroes.
-func ZeroWipe(b []byte) {
-	for i := range b {
-		b[i] = 0
+// ZeroWipe wipes a rune slice with zeroes.
+func ZeroWipe(b *[]rune) {
+	for i := range *b {
+		(*b)[i] = 0
 	}
-	b = nil
+	*b = nil
 }
 
-// Key.Wipe() overwrites key with either random bytes or zeroes.
+// Wipe overwrites key with either random runes or zeroes.
 func (k *Key) Wipe() {
 	if useCrandWipe {
 		k.RandomWipe()
@@ -98,78 +107,85 @@ func (k *Key) Wipe() {
 	}
 }
 
-// Key.RandomWipe() overwrites key with random bytes.
+// RandomWipe overwrites key with random runes.
 func (k *Key) RandomWipe() {
-	written, err := crand.Read(k.Bytes)
-	if err != nil || written != len(k.Bytes) {
+	written, err := crand.ReadRunes(k.Runes)
+	if err != nil || written != len(k.Runes) {
 		if err != nil {
 			log.Println(err.Error())
 		}
-		log.Printf("ERROR, wrote %d bytes, but expected to write %d", written, len(k.Bytes))
+		log.Printf("ERROR, wrote %d runes, but expected to write %d", written, len(k.Runes))
 		k.ZeroWipe()
 	}
-	k.Bytes = nil
+	k.Runes = nil
 }
 
-// Key.ZeroWipe() zeroes a key.
+// ZeroWipe zeroes a key.
 func (k *Key) ZeroWipe() {
-	for i := 0; i < len(k.Bytes); i++ {
-		k.Bytes[i] = 0
+	for i := 0; i < len(k.Runes); i++ {
+		k.Runes[i] = 0
 	}
-	k.Bytes = nil
+	k.Runes = nil
 }
 
-// groups(input []byte, groupsize int) returns a byte slice where each group is
-// separated by a space. Don't forget to Wipe(b []byte) this slice when you are
+// groups(input []rune, groupsize int) returns a rune slice where each group is
+// separated by a space. Don't forget to Wipe(b []rune) this slice when you are
 // done!
-func groups(input []byte, groupsize int) []byte {
-	var b []byte
-	byteCount := 0
-	for i := 0; i < len(input); i++ {
-		b = append(b, input[i])
-		byteCount++
-		if byteCount == groupsize {
-			if i != len(input)-1 {
-				b = append(b, byte(' '))
+func groups(input *[]rune, groupsize int) (r []rune) {
+	runeCount := 0
+	for i := 0; i < len(*input); i++ {
+		r = append(r, (*input)[i])
+		runeCount++
+		if runeCount == groupsize {
+			if i != len(*input)-1 {
+				r = append(r, rune(' '))
 			}
-			byteCount = 0
+			runeCount = 0
 		}
 	}
-	return b
+	return
 }
 
-// Key.Groups() returns a []byte where each group is separated by space. Don't
-// forget to Wipe(b []byte) this slice when you are done!
-func (k *Key) Groups() []byte {
-	return groups(k.Bytes, k.instance.GroupSize)
+// Groups returns a []rune where each group is separated by space. Don't forget
+// to Wipe(b []rune) this slice when you are done!
+func (k *Key) Groups() []rune {
+	return groups(&k.Runes, k.instance.GroupSize)
 }
 
-func (p *PlainText) Groups() []byte {
+// Groups assigned method returns a []rune where each group is separated by
+// space.
+func (p *PlainText) Groups() []rune {
 	// There is no need to group the Text (non-encoded) field.
-	return groups(p.EncodedText, p.instance.GroupSize)
+	return groups(&p.EncodedText, p.instance.GroupSize)
 }
 
-func (c *CipherText) Groups() []byte {
-	return groups(c.Text, c.instance.GroupSize)
+// Groups assigned method returns a []rune where each group is separated by
+// space.
+func (c *CipherText) Groups() []rune {
+	return groups(&c.Text, c.instance.GroupSize)
 }
 
-// GroupsBlock() returns a string representation of the key where each group is
+// GroupsBlock returns a string representation of the key where each group is
 // separated by a space and new lines if the block is longer than
-// Instance.Columns (or defaultColumns). Don't forget to Wipe(b []byte) this
+// Instance.Columns (or defaultColumns). Don't forget to Wipe(b []rune) this
 // slice when you are done!
-func (k *Key) GroupsBlock() []byte {
-	return []byte("Hello world, implement me!")
-}
-func (p *PlainText) GroupsBlock() []byte {
-	return []byte("HELLO WORLD")
-}
-func (c *CipherText) GroupsBlock() []byte {
-	return []byte("HELLO WORLD")
+func (k *Key) GroupsBlock() []rune {
+	return []rune("Hello world, implement me!")
 }
 
-// Wipe() overwrites key, plaintext and ciphertext with random bytes or zeroes.
+// GroupsBlock for PlainText
+func (p *PlainText) GroupsBlock() []rune {
+	return []rune("HELLO WORLD")
+}
+
+// GroupsBlock for CipherText
+func (c *CipherText) GroupsBlock() []rune {
+	return []rune("HELLO WORLD")
+}
+
+// Wipe overwrites key, plaintext and ciphertext with random runes or zeroes.
 // The order is highest priority first (plaintext), then ciphertext and finally
-// the groupcount and keyid. Nilling the byte slices should promote it for
+// the groupcount and keyid. Nilling the rune slices should promote it for
 // garbage collection.
 func (p *PlainText) Wipe() {
 	if useCrandWipe {
@@ -179,6 +195,7 @@ func (p *PlainText) Wipe() {
 	}
 }
 
+// Wipe wipes CipherText.
 func (c *CipherText) Wipe() {
 	if useCrandWipe {
 		c.RandomWipe()
@@ -187,10 +204,11 @@ func (c *CipherText) Wipe() {
 	}
 }
 
-// RandomWipe()
+// RandomWipe assigned method for PlainText wipes Text, EncodedText, GroupCount
+// and KeyID fields.
 func (p *PlainText) RandomWipe() {
 	// wipe PlainText
-	written, err := crand.Read(p.Text)
+	written, err := crand.ReadRunes(p.Text)
 	if err != nil || written != len(p.Text) {
 		for i := 0; i < len(p.Text); i++ {
 			p.Text[i] = 0
@@ -198,7 +216,7 @@ func (p *PlainText) RandomWipe() {
 	}
 	p.Text = nil
 	// wipe EncodedText
-	written, err = crand.Read(p.EncodedText)
+	written, err = crand.ReadRunes(p.EncodedText)
 	if err != nil || written != len(p.EncodedText) {
 		for i := 0; i < len(p.EncodedText); i++ {
 			p.EncodedText[i] = 0
@@ -207,19 +225,21 @@ func (p *PlainText) RandomWipe() {
 	p.EncodedText = nil
 	// wipe GroupCount
 	p.GroupCount = crand.Int()
-	// wipe KeyId
-	written, err = crand.Read(p.KeyId)
-	if err != nil || written != len(p.KeyId) {
-		for i := 0; i < len(p.KeyId); i++ {
-			p.KeyId[i] = 0
+	// wipe KeyID
+	written, err = crand.ReadRunes(p.KeyID)
+	if err != nil || written != len(p.KeyID) {
+		for i := 0; i < len(p.KeyID); i++ {
+			p.KeyID[i] = 0
 		}
 	}
-	p.KeyId = nil
+	p.KeyID = nil
 }
 
+// RandomWipe assigned method for CipherText wipes the Text, GroupCount and
+// KeyID fields.
 func (c *CipherText) RandomWipe() {
 	// wipe CipherText
-	written, err := crand.Read(c.Text)
+	written, err := crand.ReadRunes(c.Text)
 	if err != nil || written != len(c.Text) {
 		for i := 0; i < len(c.Text); i++ {
 			c.Text[i] = 0
@@ -228,16 +248,18 @@ func (c *CipherText) RandomWipe() {
 	c.Text = nil
 	// wipe GroupCount
 	c.GroupCount = crand.Int()
-	// wipe KeyId
-	written, err = crand.Read(c.KeyId)
-	if err != nil || written != len(c.KeyId) {
-		for i := 0; i < len(c.KeyId); i++ {
-			c.KeyId[i] = 0
+	// wipe KeyID
+	written, err = crand.ReadRunes(c.KeyID)
+	if err != nil || written != len(c.KeyID) {
+		for i := 0; i < len(c.KeyID); i++ {
+			c.KeyID[i] = 0
 		}
 	}
-	c.KeyId = nil
+	c.KeyID = nil
 }
 
+// ZeroWipe assigned method for PlainText writes zeroes to Text and EncodedText
+// fields.
 func (p *PlainText) ZeroWipe() {
 	// wipe PlainText
 	for i := 0; i < len(p.Text); i++ {
@@ -251,13 +273,14 @@ func (p *PlainText) ZeroWipe() {
 	p.EncodedText = nil
 	// wipe GroupCount
 	p.GroupCount = 0
-	// wipe KeyId
-	for i := 0; i < len(p.KeyId); i++ {
-		p.KeyId[i] = 0
+	// wipe KeyID
+	for i := 0; i < len(p.KeyID); i++ {
+		p.KeyID[i] = 0
 	}
-	p.KeyId = nil
+	p.KeyID = nil
 }
 
+// ZeroWipe assigned method for CipherText writes zeroes to the Text field.
 func (c *CipherText) ZeroWipe() {
 	// wipe CipherText
 	for i := 0; i < len(c.Text); i++ {
@@ -266,14 +289,14 @@ func (c *CipherText) ZeroWipe() {
 	c.Text = nil
 	// wipe GroupCount
 	c.GroupCount = 0
-	// wipe KeyId
-	for i := 0; i < len(c.KeyId); i++ {
-		c.KeyId[i] = 0
+	// wipe KeyID
+	for i := 0; i < len(c.KeyID); i++ {
+		c.KeyID[i] = 0
 	}
-	c.KeyId = nil
+	c.KeyID = nil
 }
 
-// New construct
+// New creates a new Instance construct
 func New(opts ...Option) Instance {
 	i := Instance{
 		GroupSize:     defaultGroupSize,
@@ -327,13 +350,13 @@ func WithMakeTextFiles(b bool) Option {
 
 // Methods assigned to the main struct, start of API...
 
-// Instance.Close() is an alias for Instance.Wipe()
+// Close is an alias for Instance.Wipe()
 func (r *Instance) Close() {
 	r.Wipe()
 }
 
-// Instance.Wipe() wipes all in-memory keys and texts (plaintext and
-// ciphertext) with random bytes or zeroes in an attempt to keep sensitive
+// Wipe instance assigned method wipes all in-memory keys and texts (plaintext
+// and ciphertext) with random runes or zeroes in an attempt to keep sensitive
 // information for as short time as possible in memory. Whenever keys or
 // ciphertexts are written to the database they are wiped automatically,
 // respectively, but it is up to the user of the API to call Wipe() or Close()
