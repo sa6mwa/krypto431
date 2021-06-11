@@ -94,8 +94,8 @@ UTGÅ MOT UPK79 = UTGZK ZQMOT QUPKZ HJZZZ
 
 ## DIANA APPROACH
 
-Krypto431 will utilize the US Special Forces or NSA cipher DIANA (used during
-the Vietnam war).
+Krypto431 will utilize the NSA cipher codenamed DIANA mainly used by US Special
+Forces during the Vietnam war.
 
 The US DIANA cipher uses a trigraph designed so that you use the same column
 for both encryption and decryption. This is achieved by having an alphabeth in
@@ -156,6 +156,17 @@ letter to write as plaintext is the one in lower case (h).
 This is very convenient - encryption and decryption uses exactly the same
 procedure: plaintext with key for encrypt, ciphertext with key for decrypt -
 same row and column procedure.
+```
+
+Unlike with simple modulo 26, a zero-key encryption (key consists of only A)
+does not work, instead each letter has to be coded aaccording to both forward
+and reverse position of the text and we end up with...
+
+```
+   Message: HELLO WORLD
+       Key: LRDDX HXRDT
+CipherText: HELLO WORLD
+
 ```
 
 Another arrangement of the trigraph...
