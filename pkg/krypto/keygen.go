@@ -3,44 +3,51 @@ package krypto
 import (
 	"fmt"
 	"math"
+	"runtime"
 
 	"github.com/sa6mwa/krypto431/pkg/crand"
 )
 
-// ContainsKeyID checks if the Instance.Keys slice already contains ID and
+// ContainsKeyId checks if the Instance.Keys slice already contains Id and
 // return true if it does, false if it does not.
-func (r *Instance) ContainsKeyID(keyID []rune) bool {
+func (r *Instance) ContainsKeyId(keyId *[]rune) bool {
+	if keyId == nil {
+		return false
+	}
 	for i := range r.Keys {
-		if string(r.Keys[i].ID) == string(keyID) {
+		if string(r.Keys[i].Id) == string(*keyId) {
 			return true
 		}
 	}
 	return false
 }
 
-// GenerateKeyID generates an ID. The current implementation simply generates a
+// GenerateKeyId generates an Id. The current implementation simply generates a
 // random group not in the Instance construct.
-func (r *Instance) GenerateKeyID(key *Key) error {
-	key.ID = make([]rune, r.GroupSize)
+func (r *Instance) GenerateKeyId(key *Key) error {
+	key.Id = make([]rune, r.GroupSize)
 	for { // if we already have 26*26*26*26*26 keys, this is an infinite loop :)
-		for i := range key.ID {
-			key.ID[i] = rune(crand.Intn(26)) + rune('A')
+		for i := range key.Id {
+			key.Id[i] = rune(crand.Intn(26)) + rune('A')
 		}
-		if !r.ContainsKeyID(key.ID) {
+		if !r.ContainsKeyId(key.Id) {
 			break
 		}
-		fmt.Println("WARNING!")
+		// 2 next lines for debugging, will be removed
+		_, fn, line := runtime.Caller(1)
+		fmt.Printf("key exists looping (%s line %d)\n", fn, line)
 	}
 	return nil
 }
 
 // GenerateOneKey generates a single key and appends it to the Instance.Keys
 // slice returning a pointer to the Key object
-func (r *Instance) GenerateOneKey() (*Key, error) {
+func (r *Instance) GenerateOneKey() error {
+	// define a temporary key
 	var key Key
 	key.instance = r
 	groupsToGenerate := int(math.Ceil(float64(r.KeyLength) / float64(r.GroupSize)))
-	err := r.GenerateKeyID(&key)
+	err := r.GenerateKeyId(&key)
 	if err != nil {
 		return nil, err
 	}
@@ -48,14 +55,17 @@ func (r *Instance) GenerateOneKey() (*Key, error) {
 	for i := range key.Runes {
 		key.Runes[i] = rune(crand.Intn(26)) + rune('A')
 	}
+	// append will copy key to the Keys slice
 	r.Keys = append(r.Keys, key)
-	return &key, nil
+	// wipe the temporary key
+	key.Wipe()
+	return nil
 }
 
 // GenerateKeys creates n amount of keys
 func (r *Instance) GenerateKeys(n int) error {
 	for i := 0; i < n; i++ {
-		_, err := r.GenerateOneKey()
+		err := r.GenerateOneKey()
 		if err != nil {
 			return err
 		}

@@ -156,7 +156,12 @@ letter to write as plaintext is the one in lower case (h).
 This is very convenient - encryption and decryption uses exactly the same
 procedure: plaintext with key for encrypt, ciphertext with key for decrypt -
 same row and column procedure.
-```
+
+Forgot whether the letter of the message or the key should be used as row or
+column? No problem! The really cool thing is that it does not matter if you use
+the letter from the message or the letter from the key as row (or column). You
+can mix them up, and it's OK, the result will be the same - for both encryption
+and decryption.
 
 Unlike with simple modulo 26, a zero-key encryption (key consists of only A)
 does not work, instead each letter has to be coded aaccording to both forward

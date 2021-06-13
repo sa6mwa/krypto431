@@ -1,7 +1,9 @@
 package krypto
 
 import (
+	"errors"
 	"log"
+	"math"
 	"sync"
 
 	"github.com/sa6mwa/krypto431/pkg/crand"
@@ -24,61 +26,87 @@ const (
 	defaultMakePDF       bool = false
 	defaultMakeTextFiles bool = false
 	useCrandWipe         bool = true
+	DefaultKeyCapacity   int  = 100
+	DefaultTextCapacity  int  = 100
 )
 
-// Instance stores most of the generated keys, encoded/decoded plain and
-// ciphertext in Krypto431.
+// CallSign is a rune slice and as we have slices or rune slices, this is more
+// convenient to use than [][]rune.
+type CallSign []rune
+
+// Instance stores generated keys, plaintext, ciphertext, callsign(s) and
+// configuration items. It is mandatory to populate MyCallSigns with at least
+// one call sign (something identifying yourself in message handling). It will
+// be converted to upper case.
 type Instance struct {
 	Mu            *sync.Mutex
 	GroupSize     int
 	KeyLength     int
 	Columns       int
 	Keys          []Key
-	PlainTexts    []PlainText
-	CipherTexts   []CipherText
+	Texts         []Text
 	MakePDF       bool
 	MakeTextFiles bool
+	MyCallSigns   *[]CallSign
 }
 
-// Key struct holds a key.
+// Key struct holds a key. Keepers is a list of callsigns or other identifiers
+// that have access to this key (and can use it for encryption/decryption). The
+// proper procedure is to share the key with it's respective keeper(s). By
+// default, all your callsigns (MyCallSigns) will be appended to the Keepers
+// slice.
 type Key struct {
 	ID       []rune
 	Runes    []rune
+	Keepers  []CallSign
 	instance *Instance
 }
 
-// PlainText holds plaintext messages and plaintext encoded text (encryption
-// flow is: Text, EncodedText, CipherText.Text.
-type PlainText struct {
-	GroupCount  int
-	KeyID       []rune
-	Text        []rune
-	EncodedText []rune
-	instance    *Instance
-}
-
-// CipherText holds encrypted text ready for decryption.
-type CipherText struct {
+// Text holds plaintext and ciphertext. To encrypt, you need to populate the
+// PlainText and Recipients fields, the rest will be updated by the Encrypt
+// function which will choose the next available key. If PlainText is longer
+// than the key, the Encrypt function will use another key where the key's
+// Keepers field matches all of the Recipients. If there are not enough keys to
+// encrypt the message, Encrypt will fail. Encrypt will cache all non-used keys
+// from the database matching the Recipients into the instance Keys slice
+// before enciphering. To decrypt you need to have ciphertext in the CipherText
+// field and the start KeyId. There is no method (yet) to figure out which of
+// your keys can be used to decipher the message. If the KeyId is not already
+// in your instace's Keys slice it will be fetched from the database or fail.
+// The KeyId should be the first group in your received message.
+type Text struct {
 	GroupCount int
-	KeyID      []rune
-	Text       []rune
-	instance   *Instance
+	KeyId      []rune
+	PlainText  []rune
+	CipherText []rune
+	Recipients []CallSign
+	instace    *Instance
 }
 
 // Wipe wipes a rune slice.
-func Wipe(b *[]rune) {
+func Wipe(b *[]rune) error {
+	if b == nil {
+		return errors.New("Received a nil pointer")
+	}
 	if useCrandWipe {
 		err := RandomWipe(b)
 		if err != nil {
-			panic(err)
+			return err
 		}
 	} else {
-		ZeroWipe(b)
+		err := ZeroWipe(b)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // RandomWipe wipes a rune slice with random runes.
 func RandomWipe(b *[]rune) error {
+	if b == nil {
+		return errors.New("Received a nil pointer")
+	}
 	written, err := crand.ReadRunes(*b)
 	if err != nil || written != len(*b) {
 		if err != nil {
@@ -91,24 +119,38 @@ func RandomWipe(b *[]rune) error {
 }
 
 // ZeroWipe wipes a rune slice with zeroes.
-func ZeroWipe(b *[]rune) {
+func ZeroWipe(b *[]rune) error {
+	if b == nil {
+		return errors.New("Received a nil pointer")
+	}
 	for i := range *b {
 		(*b)[i] = 0
 	}
 	*b = nil
+	return nil
 }
 
 // Wipe overwrites key with either random runes or zeroes.
-func (k *Key) Wipe() {
+func (k *Key) Wipe() error {
 	if useCrandWipe {
-		k.RandomWipe()
+		err := k.RandomWipe()
+		if err != nil {
+			return err
+		}
 	} else {
-		k.ZeroWipe()
+		err := k.ZeroWipe()
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // RandomWipe overwrites key with random runes.
-func (k *Key) RandomWipe() {
+func (k *Key) RandomWipe() error {
+	if k == nil {
+		return errors.New("Received a nil pointer")
+	}
 	written, err := crand.ReadRunes(k.Runes)
 	if err != nil || written != len(k.Runes) {
 		if err != nil {
@@ -118,182 +160,136 @@ func (k *Key) RandomWipe() {
 		k.ZeroWipe()
 	}
 	k.Runes = nil
+	return nil
 }
 
 // ZeroWipe zeroes a key.
-func (k *Key) ZeroWipe() {
+func (k *Key) ZeroWipe() error {
+	if k == nil {
+		return errors.New("Received a nil pointer")
+	}
 	for i := 0; i < len(k.Runes); i++ {
 		k.Runes[i] = 0
 	}
 	k.Runes = nil
+	return nil
 }
 
-// groups(input []rune, groupsize int) returns a rune slice where each group is
-// separated by a space. Don't forget to Wipe(b []rune) this slice when you are
+// groups returns a rune slice where each group is
+// separated by a space. Don't forget to Wipe(myRuneSlice) when you are
 // done!
-func groups(input *[]rune, groupsize int) (r []rune) {
+func groups(input *[]rune, groupsize int) (*[]rune, error) {
+	if input == nil {
+		return nil, errors.New("Input must not be a nil pointer")
+	}
+	if groupsize <= 0 {
+		return nil, errors.New("Groupsize must be above 0")
+	}
+	output := make([]rune, 0, int(math.Ceil(float64(len(*input))/float64(groupsize))*(groupsize+1)))
 	runeCount := 0
 	for i := 0; i < len(*input); i++ {
-		r = append(r, (*input)[i])
+		output = append(output, (*input)[i])
 		runeCount++
 		if runeCount == groupsize {
 			if i != len(*input)-1 {
-				r = append(r, rune(' '))
+				output = append(output, rune(' '))
 			}
 			runeCount = 0
 		}
 	}
-	return
+	return &output, nil
 }
 
-// Groups returns a []rune where each group is separated by space. Don't forget
-// to Wipe(b []rune) this slice when you are done!
-func (k *Key) Groups() []rune {
+// Groups appends runes into the target slice into groups of GroupSize runes
+// separated by space. Don't forget to Wipe(target) this slice when you are
+// done!
+func (k *Key) Groups() (*[]rune, error) {
 	return groups(&k.Runes, k.instance.GroupSize)
 }
 
 // Groups assigned method returns a []rune where each group is separated by
 // space.
-func (p *PlainText) Groups() []rune {
+func (t *Text) Groups() (*[]rune, error) {
 	// There is no need to group the Text (non-encoded) field.
-	return groups(&p.EncodedText, p.instance.GroupSize)
-}
-
-// Groups assigned method returns a []rune where each group is separated by
-// space.
-func (c *CipherText) Groups() []rune {
-	return groups(&c.Text, c.instance.GroupSize)
+	return groups(&t.CipherText, t.instance.GroupSize)
 }
 
 // GroupsBlock returns a string representation of the key where each group is
 // separated by a space and new lines if the block is longer than
 // Instance.Columns (or defaultColumns). Don't forget to Wipe(b []rune) this
 // slice when you are done!
-func (k *Key) GroupsBlock() []rune {
-	return []rune("Hello world, implement me!")
+func (k *Key) GroupsBlock() (*[]rune, error) {
+	return nil, nil
 }
 
-// GroupsBlock for PlainText
-func (p *PlainText) GroupsBlock() []rune {
-	return []rune("HELLO WORLD")
-}
-
-// GroupsBlock for CipherText
-func (c *CipherText) GroupsBlock() []rune {
-	return []rune("HELLO WORLD")
+// GroupsBlock for Text
+func (t *Text) GroupsBlock() (*[]rune, error) {
+	return nil, nil
 }
 
 // Wipe overwrites key, plaintext and ciphertext with random runes or zeroes.
 // The order is highest priority first (plaintext), then ciphertext and finally
 // the groupcount and keyid. Nilling the rune slices should promote it for
 // garbage collection.
-func (p *PlainText) Wipe() {
+func (t *Text) Wipe() {
 	if useCrandWipe {
-		p.RandomWipe()
+		t.RandomWipe()
 	} else {
-		p.ZeroWipe()
+		t.ZeroWipe()
 	}
 }
 
-// Wipe wipes CipherText.
-func (c *CipherText) Wipe() {
-	if useCrandWipe {
-		c.RandomWipe()
-	} else {
-		c.ZeroWipe()
-	}
-}
-
-// RandomWipe assigned method for PlainText wipes Text, EncodedText, GroupCount
-// and KeyID fields.
-func (p *PlainText) RandomWipe() {
+// RandomWipe assigned method for Text wipes PlainText, CipherText, GroupCount
+// and KeyId fields.
+func (t *Text) RandomWipe() {
 	// wipe PlainText
-	written, err := crand.ReadRunes(p.Text)
-	if err != nil || written != len(p.Text) {
-		for i := 0; i < len(p.Text); i++ {
-			p.Text[i] = 0
+	written, err := crand.ReadRunes(t.PlainText)
+	if err != nil || written != len(t.PlainText) {
+		for i := 0; i < len(t.PlainText); i++ {
+			t.PlainText[i] = 0
 		}
 	}
-	p.Text = nil
-	// wipe EncodedText
-	written, err = crand.ReadRunes(p.EncodedText)
-	if err != nil || written != len(p.EncodedText) {
-		for i := 0; i < len(p.EncodedText); i++ {
-			p.EncodedText[i] = 0
-		}
-	}
-	p.EncodedText = nil
-	// wipe GroupCount
-	p.GroupCount = crand.Int()
-	// wipe KeyID
-	written, err = crand.ReadRunes(p.KeyID)
-	if err != nil || written != len(p.KeyID) {
-		for i := 0; i < len(p.KeyID); i++ {
-			p.KeyID[i] = 0
-		}
-	}
-	p.KeyID = nil
-}
-
-// RandomWipe assigned method for CipherText wipes the Text, GroupCount and
-// KeyID fields.
-func (c *CipherText) RandomWipe() {
+	t.PlainText = nil
 	// wipe CipherText
-	written, err := crand.ReadRunes(c.Text)
-	if err != nil || written != len(c.Text) {
-		for i := 0; i < len(c.Text); i++ {
-			c.Text[i] = 0
+	written, err = crand.ReadRunes(t.CipherText)
+	if err != nil || written != len(t.CipherText) {
+		for i := 0; i < len(t.CipherText); i++ {
+			t.CipherText[i] = 0
 		}
 	}
-	c.Text = nil
+	t.CipherText = nil
 	// wipe GroupCount
-	c.GroupCount = crand.Int()
-	// wipe KeyID
-	written, err = crand.ReadRunes(c.KeyID)
-	if err != nil || written != len(c.KeyID) {
-		for i := 0; i < len(c.KeyID); i++ {
-			c.KeyID[i] = 0
+	t.GroupCount = crand.Int()
+	// wipe KeyId
+	written, err = crand.ReadRunes(t.KeyId)
+	if err != nil || written != len(t.KeyId) {
+		for i := 0; i < len(t.KeyId); i++ {
+			t.KeyId[i] = 0
 		}
 	}
-	c.KeyID = nil
+	t.KeyId = nil
 }
 
 // ZeroWipe assigned method for PlainText writes zeroes to Text and EncodedText
 // fields.
-func (p *PlainText) ZeroWipe() {
+func (t *Text) ZeroWipe() {
 	// wipe PlainText
-	for i := 0; i < len(p.Text); i++ {
-		p.Text[i] = 0
+	for i := 0; i < len(t.PlainText); i++ {
+		t.PlainText[i] = 0
 	}
-	p.Text = nil
-	// wipe EncodedText
-	for i := 0; i < len(p.EncodedText); i++ {
-		p.EncodedText[i] = 0
-	}
-	p.EncodedText = nil
-	// wipe GroupCount
-	p.GroupCount = 0
-	// wipe KeyID
-	for i := 0; i < len(p.KeyID); i++ {
-		p.KeyID[i] = 0
-	}
-	p.KeyID = nil
-}
-
-// ZeroWipe assigned method for CipherText writes zeroes to the Text field.
-func (c *CipherText) ZeroWipe() {
+	t.PlainText = nil
 	// wipe CipherText
-	for i := 0; i < len(c.Text); i++ {
-		c.Text[i] = 0
+	for i := 0; i < len(t.CipherText); i++ {
+		t.CipherText[i] = 0
 	}
-	c.Text = nil
+	t.CipherText = nil
 	// wipe GroupCount
-	c.GroupCount = 0
-	// wipe KeyID
-	for i := 0; i < len(c.KeyID); i++ {
-		c.KeyID[i] = 0
+	t.GroupCount = 0
+	// wipe KeyId
+	for i := 0; i < len(t.KeyId); i++ {
+		t.KeyId[i] = 0
 	}
-	c.KeyID = nil
+	t.KeyId = nil
 }
 
 // New creates a new Instance construct
@@ -304,6 +300,8 @@ func New(opts ...Option) Instance {
 		Columns:       defaultColumns,
 		MakePDF:       defaultMakePDF,
 		MakeTextFiles: defaultMakeTextFiles,
+		Keys:          make([]Key, 0, DefaultKeyCapacity),
+		Texts:         make([]Text, 0, DefaultTextCapacity),
 	}
 	for _, opt := range opts {
 		opt(&i)
@@ -311,12 +309,27 @@ func New(opts ...Option) Instance {
 	if i.Mu == nil {
 		i.Mu = &sync.Mutex{}
 	}
+	if i.MyCallSigns == nil {
+		// KA = Kilo Alpha = Kalle Anka = Donald Duck
+		defaultCallSigns := []rune{[]rune("KA")}
+		i.MyCallSigns = &defaultCallSigns
+	}
 	return i
 }
 
 // Option fn type for the New() construct.
 type Option func(r *Instance)
 
+func WithCallSign(cs *[]rune) Option {
+	return func(r *Instance) {
+		r.MyCallSigns = append(r.MyCallSigns, cs)
+	}
+}
+func WithCallSigns(css *[][]rune) Option {
+	return func(r *Instance) {
+		r.MyCallSigns = css
+	}
+}
 func WithMutex(mu *sync.Mutex) Option {
 	return func(r *Instance) {
 		r.Mu = mu
@@ -366,21 +379,15 @@ func (r *Instance) Wipe() {
 	for i := range r.Keys {
 		r.Keys[i].Wipe()
 	}
-	for i := range r.PlainTexts {
-		r.PlainTexts[i].Wipe()
-	}
-	for i := range r.CipherTexts {
-		r.CipherTexts[i].Wipe()
+	for i := range r.Texts {
+		r.Texts[i].Wipe()
 	}
 }
 
 // TODO: Implement! :)
 
-func (r *Instance) Encode(plaintext string) {}
-func (r *Instance) Decode(plaintext string) {}
-
-func (r *Instance) Encrypt(plaintext string)  {}
-func (r *Instance) Decrypt(ciphertext string) {}
+//func (r *Instance) Encode(plaintext string) {}
+//func (r *Instance) Decode(plaintext string) {}
 
 func (r *Instance) EncryptFile(path string) {}
 func (r *Instance) DecryptFile(path string) {}

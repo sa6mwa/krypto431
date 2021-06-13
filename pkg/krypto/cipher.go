@@ -1,6 +1,9 @@
 package krypto
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 var (
 	// CharacterTablePrimary is the initial character table
@@ -9,7 +12,7 @@ var (
 	CharacterTableSecondary []rune = []rune(`0123456789ÅÄÖÆØ~Q~Z~~~~~~~`)
 	// CharacterTableTertiary is the 3rd character table
 	CharacterTableTertiary []rune = []rune(`{}:,\[]"?!@#%&*.?_/+-=~~~~`)
-	// CharacterTables slice of all character tables (this is what the code use)
+	// CharacterTables is a slice of all character tables (this is what the code use)
 	CharacterTables [][]rune = [][]rune{
 		CharacterTablePrimary, CharacterTableSecondary, CharacterTableTertiary,
 	}
@@ -18,7 +21,7 @@ var (
 const (
 	primaryTable   int = 0
 	secondaryTable int = 1
-	//tertiaryTable  int = 2
+	tertiaryTable  int = 2
 )
 
 const (
@@ -80,12 +83,12 @@ func isLetter(c rune) bool {
 }
 */
 
-func toUpper(c *rune) (b rune) {
+func toUpper(c *rune) {
 	var diff rune = 'a' - 'A'
 	if *c >= 'a' && *c <= 'z' {
-		b = *c - diff
+		*b = *c - diff
 	} else {
-		b = *c
+		*b = *c
 	}
 	return
 }
@@ -100,15 +103,12 @@ func toLower(c *rune) (b rune) {
 }
 */
 
-func appendByte(b *[]rune, c rune) {
-	*b = append(*b, c)
-}
-
 type codecState struct {
 	table          int
 	numberOfTables int
 	shift          bool
 	binary         bool
+	lowerNibble    bool
 }
 
 func newState() *codecState {
@@ -117,21 +117,23 @@ func newState() *codecState {
 		numberOfTables: len(CharacterTables),
 		shift:          false,
 		binary:         false,
+		lowerNibble:    false,
 	}
 }
 
-func (state *codecState) reset(p *PlainText) error {
+func (state *codecState) reset(p *Text) error {
 	if p != nil {
 		err := state.gotoTable(secondaryTable, p)
 		if err != nil {
 			return err
 		}
-		appendByte(&p.EncodedText, resetAllChar)
+		appendRune(&p.CipherText, resetAllChar)
 	}
 	state.table = 0
 	state.numberOfTables = len(CharacterTables)
 	state.shift = false
 	state.binary = false
+	state.lowerNibble = false
 	return nil
 }
 func (state *codecState) nextTable(p *PlainText) {
@@ -206,8 +208,9 @@ func (state *codecState) encodeCharacter(input *rune, p *PlainText) error {
 			}
 		}
 		// find character in one of the tables
+		c := *input
+		toUpper(&c)
 		foundIt := false
-		c := toUpper(input)
 		for t := range CharacterTables {
 			for i, tc := range CharacterTables[t] {
 				if tc == specialOpChar {
@@ -229,6 +232,8 @@ func (state *codecState) encodeCharacter(input *rune, p *PlainText) error {
 				break
 			}
 		}
+		// zero copy of rune
+		c = 0
 		if !foundIt {
 			// enter binary mode
 			panic("binary mode not implemented yet")
@@ -239,7 +244,19 @@ func (state *codecState) encodeCharacter(input *rune, p *PlainText) error {
 	return nil
 }
 
-// Encode codes the Text field into the EncodedText field of a PlainText struct
+func (state *codecState) decodeCharacter(input *rune, p *PlainText) error {
+	if !state.binary {
+	} else {
+		panic("binary mode not implemented yet")
+	}
+}
+
+// Encode codes the Text field into the EncodedText field of a PlainText
+// struct. Encode will prepend one star (*) in the beginning and add a key
+// change if the message is more than Instance.KeyLength (minus characters
+// needed to make a key change) long and add a star (*) as a placeholder for a
+// key. In order to encrypt this encoded message you need to have key(s) of the
+// correct length available in the database or encryption will fail.
 func (p *PlainText) Encode() error {
 	Wipe(&p.EncodedText)
 	state := newState()
@@ -250,12 +267,29 @@ func (p *PlainText) Encode() error {
 			return err
 		}
 	}
-
+	//continue here
 	return nil
 }
 
 // Decode decodes the EncodedText field into the Text field of a PlainText struct
 func (p *PlainText) Decode() error {
 	Wipe(&p.Text)
+	state := newState()
+
+	for i := range p.EncodedText {
+		err := state.decodeCharacter(&p.EncodedText[i], p)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// Encrypt encrypts the PlainText field into the CipherText field usin of a Text
+// structure and wipes the PlainText field.
+func (t *Text) Encrypt(recipients *[]CallSign) error {
+	if len(t.KeyId) < t.instance.GroupSize {
+		return errors.New("KeyId is empty or less than GroupSize for this instance")
+	}
+
 }
