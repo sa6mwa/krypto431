@@ -1,4 +1,4 @@
-package krypto
+package krypto431
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 	"math"
 	"sync"
 
-	"github.com/sa6mwa/krypto431/pkg/crand"
+	"github.com/sa6mwa/krypto431/crand"
 )
 
 // Krypto431 is the interface. Each struct must have these assigned methods.
@@ -30,24 +30,20 @@ const (
 	DefaultTextCapacity  int  = 100
 )
 
-// CallSign is a rune slice and as we have slices or rune slices, this is more
-// convenient to use than [][]rune.
-type CallSign []rune
-
 // Instance stores generated keys, plaintext, ciphertext, callsign(s) and
 // configuration items. It is mandatory to populate MyCallSigns with at least
 // one call sign (something identifying yourself in message handling). It will
 // be converted to upper case.
 type Instance struct {
 	Mu            *sync.Mutex
-	GroupSize     int
-	KeyLength     int
-	Columns       int
-	Keys          []Key
-	Texts         []Text
-	MakePDF       bool
-	MakeTextFiles bool
-	MyCallSigns   *[]CallSign
+	GroupSize     int       `json:",omitempty"`
+	KeyLength     int       `json:",omitempty"`
+	Columns       int       `json:",omitempty"`
+	Keys          []Key     `json:",omitempty"`
+	Texts         []Text    `json:",omitempty"`
+	MakePDF       bool      `json:",omitempty"`
+	MakeTextFiles bool      `json:",omitempty"`
+	MyCallSigns   *[][]rune `json:",omitempty"`
 }
 
 // Key struct holds a key. Keepers is a list of callsigns or other identifiers
@@ -56,10 +52,12 @@ type Instance struct {
 // default, all your callsigns (MyCallSigns) will be appended to the Keepers
 // slice.
 type Key struct {
-	ID       []rune
-	Runes    []rune
-	Keepers  []CallSign
-	instance *Instance
+	Id        []rune   `json:",omitempty"`
+	Runes     []rune   `json:",omitempty"`
+	Keepers   [][]rune `json:",omitempty"`
+	Used      bool     `json:",omitempty"`
+	Decrypted bool
+	instance  *Instance
 }
 
 // Text holds plaintext and ciphertext. To encrypt, you need to populate the
@@ -75,11 +73,12 @@ type Key struct {
 // in your instace's Keys slice it will be fetched from the database or fail.
 // The KeyId should be the first group in your received message.
 type Text struct {
-	GroupCount int
-	KeyId      []rune
-	PlainText  []rune
-	CipherText []rune
-	Recipients []CallSign
+	GroupCount int      `json:",omitempty"`
+	KeyId      []rune   `json:",omitempty"`
+	PlainText  []rune   `json:",omitempty"`
+	CipherText []rune   `json:",omitempty"`
+	Recipients [][]rune `json:",omitempty"`
+	Decrypted  bool
 	instace    *Instance
 }
 
@@ -322,7 +321,7 @@ type Option func(r *Instance)
 
 func WithCallSign(cs *[]rune) Option {
 	return func(r *Instance) {
-		r.MyCallSigns = append(r.MyCallSigns, cs)
+		r.MyCallSigns = append(r.MyCallSigns, *cs)
 	}
 }
 func WithCallSigns(css *[][]rune) Option {
@@ -359,6 +358,32 @@ func WithMakeTextFiles(b bool) Option {
 	return func(r *Instance) {
 		r.MakeTextFiles = b
 	}
+}
+
+// Contains returns true is all needles can be found in the haystack, but if
+// one slice in the haystack is a star (*) it will always return true. Intended
+// to find Keepers of Keys where needles are Text.Recipients and haystack is
+// Key.Keepers.
+func Contains(needles *[][]rune, haystack *[][]rune) bool {
+	if needles == nil || haystack == nil {
+		return false
+	}
+	if len(*needles) == 0 || len(*haystack) == 0 {
+		return false
+	}
+loop:
+	for i := range *needles {
+		for x := range *haystack {
+			if string((*haystack)[x]) == `*` {
+				return true
+			}
+			if string((*haystack)[x]) == string((*needles)[i]) {
+				continue loop
+			}
+		}
+		return false
+	}
+	return true
 }
 
 // Methods assigned to the main struct, start of API...

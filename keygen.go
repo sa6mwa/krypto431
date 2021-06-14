@@ -1,11 +1,11 @@
-package krypto
+package krypto431
 
 import (
 	"fmt"
 	"math"
 	"runtime"
 
-	"github.com/sa6mwa/krypto431/pkg/crand"
+	"github.com/sa6mwa/krypto431/crand"
 )
 
 // ContainsKeyId checks if the Instance.Keys slice already contains Id and

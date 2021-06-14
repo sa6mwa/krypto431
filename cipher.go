@@ -1,4 +1,4 @@
-package krypto
+package krypto431
 
 import (
 	"errors"
@@ -6,14 +6,10 @@ import (
 )
 
 var (
-	// CharacterTablePrimary is the initial character table
-	CharacterTablePrimary []rune = []rune(`ABCDEFGHIJKLMNOP RSTUVWXY~`)
-	// CharacterTableSecondary is the 2nd (previously alternate) character table
-	CharacterTableSecondary []rune = []rune(`0123456789ÅÄÖÆØ~Q~Z~~~~~~~`)
-	// CharacterTableTertiary is the 3rd character table
-	CharacterTableTertiary []rune = []rune(`{}:,\[]"?!@#%&*.?_/+-=~~~~`)
-	// CharacterTables is a slice of all character tables (this is what the code use)
-	CharacterTables [][]rune = [][]rune{
+	CharacterTablePrimary   []rune   = []rune(`ABCDEFGHIJKLMNOP RSTUVWXY¤`)
+	CharacterTableSecondary []rune   = []rune(`0123456789ÅÄÖÆØ¤Q¤Z¤¤¤¤¤¤¤`)
+	CharacterTableTertiary  []rune   = []rune(`{}:,\[]"?!@#%&*.?-/+_=¤¤¤¤`)
+	CharacterTables         [][]rune = [][]rune{
 		CharacterTablePrimary, CharacterTableSecondary, CharacterTableTertiary,
 	}
 )
@@ -27,7 +23,7 @@ const (
 const (
 	// specialOpChar was dummyChar, means character has special meaning, see below...
 	// specialOpChar will be replaced by zeroes during initialization (0x00)
-	specialOpChar rune = '~'
+	specialOpChar rune = '¤'
 
 	// caseToggleChar adds strings.ToLower() on every character depending on previous
 	// state (stateShift).
@@ -285,11 +281,39 @@ func (p *PlainText) Decode() error {
 	return nil
 }
 
-// Encrypt encrypts the PlainText field into the CipherText field usin of a Text
+// Encrypt encrypts the PlainText field into the CipherText field of a Text
 // structure and wipes the PlainText field.
-func (t *Text) Encrypt(recipients *[]CallSign) error {
-	if len(t.KeyId) < t.instance.GroupSize {
-		return errors.New("KeyId is empty or less than GroupSize for this instance")
+func (t *Text) Encrypt() error {
+	if len(t.PlainText) == 0 {
+		return errors.New("PlainText is empty")
+	}
+	if len(t.Recipients) == 0 {
+		return errors.New("Text has no Recipients")
+	}
+	// Find the first key where all Recipients are Keepers
+	var keyPtr *[]rune
+	for i := range t.instance.Keys {
+		if i.instance.Keys[i].Used {
+			continue
+		}
+		if Contains(&t.Recipients, &t.instance.Keys[i].Keepers) {
+			// Found a key
+			// Mark the key as Used
+			t.instance.Keys[i].Used = true
+			// if !Decrypted, decrypt the key
+			// copy Key.Id to Text.KeyId
+			t.KeyId = t.instance.Keys[i].Id
+			keyPtr = &t.instance.Keys[i].Runes
+			break
+		}
 	}
 
+	if keyPtr == nil {
+		return errors.New("Did not find a key where all Recipients are Keepers of the same key")
+	}
+	if len(t.KeyId) < t.instance.GroupSize {
+		return errors.New("KeyId is empty or less than GroupSize")
+	}
+
+	// continue here, we have the keyPtr to pass to encipher()
 }
