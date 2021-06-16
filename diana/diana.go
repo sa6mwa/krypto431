@@ -51,28 +51,53 @@ import (
 	"errors"
 )
 
-// Trigraph writes the trigraph of input X and Y (where X is usually the row
-// and Y is the column, but this does not matter). Pointers are used in the
+// TrigraphByte writes the trigraph of input X and Y (where X is usually the
+// row and Y is the column, but this does not matter). Pointers are used in the
 // effort to prevent anything from the input being copied. Krypto431 wipes it's
 // data structures and if there would be copies elsewhere it would be in vain.
-func Trigraph(writeTo *rune, x *rune, y *rune) error {
-	if !writeTo || !x || !y {
+func TrigraphByte(writeTo *byte, x *byte, y *byte) error {
+	if writeTo == nil || x == nil || y == nil {
+		return errors.New("Trigraph: no inputs can be nil")
+	}
+	if (*x < byte('A') || *x > byte('Z')) || (*y < byte('A') || *y > byte('Z')) {
+		return errors.New("Trigraph: input X and Y must be between A and Z")
+	}
+	// DIANA algorithm: 25 - x - y) & 26 = third letter, i.e trigraph With type
+	// byte this will produce negative numbers and since byte is an alias for
+	// uint8 (unsigned) the double modulo in order to shift sign from negative to
+	// positive will fail, thus casting them as int.
+	*writeTo = byte(int('A') + ((((25 - (int(*x) - int('A')) - (int(*y) - int('A'))) % 26) + 26) % 26))
+	return nil
+}
+
+// TrigraphRune is the rune implementation of TrigraphByte. See TrigraphByte
+// for information.
+func TrigraphRune(writeTo *rune, x *rune, y *rune) error {
+	if writeTo == nil || x == nil || y == nil {
 		return errors.New("Trigraph: no inputs can be nil")
 	}
 	if (*x < 'A' || *x > 'Z') || (*y < 'A' || *y > 'Z') {
 		return errors.New("Trigraph: input X and Y must be between A and Z")
 	}
-	xnum := *x - rune('A')
-	ynum := *y - rune('A')
 	// DIANA algorithm: 25 - x - y) & 26 = third letter, i.e trigraph
-	*writeTo = rune('A') + ((((25 - *x - *y) % 26) + 26) % 26)
+	// A rune is an alias for int32, signed, so that will work shifting a
+	// negative number into a positive.
+	*writeTo = rune('A') + ((((25 - (*x - rune('A')) - (*y - rune('A'))) % 26) + 26) % 26)
 	return nil
+}
+
+// ZeroKeyByte returns a "zero" encryption letter (rune) key in order to
+// trigraph-encode an input letter to the same output letter (which makes the
+// plaintext same as the ciphertext, effectively a zero key in a standard
+// Vignere cipher).
+func ZeroKeyByte(writeTo *byte, character *byte) error {
+	return TrigraphByte(writeTo, character, character)
 }
 
 // ZeroKeyRune returns a "zero" encryption letter (rune) key in order to
 // trigraph-encode an input letter to the same output letter (which makes the
 // plaintext same as the ciphertext, effectively a zero key in a standard
 // Vignere cipher).
-func ZeroKeyRuner(writeTo *rune, character *rune) error {
-	return Trigraph(writeTo, character, character)
+func ZeroKeyRune(writeTo *rune, character *rune) error {
+	return TrigraphRune(writeTo, character, character)
 }
