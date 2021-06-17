@@ -300,6 +300,24 @@ and will never block again - exactly what we want.
 
 Reference: <https://www.2uo.de/myths-about-urandom/>
 
+## Interactive urfave/cli
+
+<https://github.com/codegangsta/hip/blob/master/hip.go#L64-L78>
+```go
+console := cli.NewApp()
+//...
+line, err := readline.String("> ")
+if err == io.EOF {
+	break
+}
+if err != nil {
+	fmt.Println("error: ", err)
+	break
+}
+readline.AddHistory(line)
+console.Run(strings.Fields("cmd " + line))
+```
+
 ## Encrypted sqlite3
 
 There are a few options in Go...
