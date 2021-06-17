@@ -318,6 +318,11 @@ readline.AddHistory(line)
 console.Run(strings.Fields("cmd " + line))
 ```
 
+Combine with <https://github.com/c-bata/go-prompt> or
+<https://github.com/AlecAivazis/survey>. Look at something like the `rancher`
+cli <https://github.com/rancher/cli/blob/master/rancher_prompt/completer.go>
+which uses both `urfave/cli` and `c-bata/go-prompt`.
+
 ## Encrypted sqlite3
 
 There are a few options in Go...
