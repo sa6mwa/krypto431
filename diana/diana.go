@@ -101,3 +101,43 @@ func ZeroKeyByte(writeTo *byte, character *byte) error {
 func ZeroKeyRune(writeTo *rune, character *rune) error {
 	return TrigraphRune(writeTo, character, character)
 }
+
+// AppendTrigraphByteByKey will append the encoded character to a byte slice
+// tracking an indexed key. It will also increment the index through the
+// keyIndex pointer when done making it possible to call this function
+// repeatedly per input character. You will have to check that the index is not
+// out of range, function will fail if index is greater than the length of the
+// byte slice.  You should also ensure the the byte slice (pointing at by
+// writeTo) has the desired capacity in order to prevent the append function to
+// make a new slice and copy everything from the old slice, thus leaving traces
+// of encrypted text in memory that you are unable to wipe by yourself.
+func AppendTrigraphByteByKey(writeTo *[]byte, character *byte, key *[]byte, keyIndex *int) error {
+	if writeTo == nil {
+		return errors.New("Output pointer can not be nil")
+	}
+	if key == nil {
+		return errors.New("Key can not be nil")
+	}
+	if keyIndex == nil {
+		return errors.New("Key index can not be nil")
+	}
+	if character == nil {
+		return errors.New("Character pointer is nil")
+	}
+	if *keyIndex < 0 {
+		return errors.New("Key index can not be negative")
+	}
+	if *keyIndex > len(*writeTo) {
+		return errors.New("Key index is out-of-bounds")
+	}
+	var b byte
+	err := TrigraphByte(&b, character, &(*key)[*keyIndex])
+	if err != nil {
+		b = 0
+		return err
+	}
+	*writeTo = append(*writeTo, b)
+	b = 0
+	*keyIndex++
+	return nil
+}

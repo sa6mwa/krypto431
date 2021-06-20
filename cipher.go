@@ -100,6 +100,7 @@ func toLower(c *rune) (b rune) {
 */
 
 type codecState struct {
+	keyIndex       int
 	table          int
 	numberOfTables int
 	shift          bool
@@ -109,6 +110,7 @@ type codecState struct {
 
 func newState() *codecState {
 	return &codecState{
+		keyIndex:       0,
 		table:          0,
 		numberOfTables: len(CharacterTables),
 		shift:          false,
@@ -123,7 +125,7 @@ func (state *codecState) reset(p *Text) error {
 		if err != nil {
 			return err
 		}
-		appendRune(&p.CipherText, resetAllChar)
+		appendByte(&p.CipherText, resetAllChar)
 	}
 	state.table = 0
 	state.numberOfTables = len(CharacterTables)
@@ -132,19 +134,19 @@ func (state *codecState) reset(p *Text) error {
 	state.lowerNibble = false
 	return nil
 }
-func (state *codecState) nextTable(p *PlainText) {
+func (state *codecState) nextTable(t *Text) {
 	state.table = (state.table + 1) % state.numberOfTables
 	if p != nil {
-		appendByte(&p.EncodedText, nextTableChar)
+		appendByte(&t.EncodedText, nextTableChar)
 	}
 }
-func (state *codecState) toggleCase(p *PlainText) error {
+func (state *codecState) toggleCase(t *Text) error {
 	if p != nil {
 		err := state.gotoTable(secondaryTable, p)
 		if err != nil {
 			return err
 		}
-		appendByte(&p.EncodedText, caseToggleChar)
+		appendByte(&t.EncodedText, caseToggleChar)
 	}
 	state.shift = !state.shift
 	return nil
@@ -194,7 +196,7 @@ func (state *codecState) gotoTable(t int, p *PlainText) error {
 // rune that can not be found in one of the tables appear, we switch to binary
 // mode and will not exit this mode unless reaching the end or running out of
 // key runes (where it will switch to the next key).
-func (state *codecState) encodeCharacter(input *rune, p *PlainText) error {
+func (state *codecState) encodeCharacter(input *rune, t *Text) error {
 	if !state.binary {
 		if (isUpper(input) && state.shift) || (isLower(input) && !state.shift) {
 			// need to shift/unshift...
@@ -281,14 +283,22 @@ func (p *PlainText) Decode() error {
 	return nil
 }
 
-// Encrypt encrypts the PlainText field into the CipherText field of a Text
-// structure and wipes the PlainText field.
-func (t *Text) Encrypt() error {
+// EnrichWithKey finds the first appropriate key for this Text structure where
+// each of the Text's Recipients are Keepers of the same key. It returns a
+// pointer to the key bytes/runes that will be used by diana.Trigraph later. It
+// also returns error in case no key was found or other error occurred.
+func (t *Text) EnrichWithKey() (*[]rune, error) {
 	if len(t.PlainText) == 0 {
-		return errors.New("PlainText is empty")
+		return nil, errors.New("PlainText is empty")
+	}
+	if len(t.KeyId) > 0 {
+		return nil, errors.New("Text appear to be enriched with a KeyId already, will not continue")
+	}
+	if len(t.CipherText) > 0 {
+		return nil, errors.New("Text appear to have CipherText already, will not enrich with key")
 	}
 	if len(t.Recipients) == 0 {
-		return errors.New("Text has no Recipients")
+		return nil, errors.New("Text has no Recipients")
 	}
 	// Find the first key where all Recipients are Keepers
 	var keyPtr *[]rune
@@ -296,24 +306,48 @@ func (t *Text) Encrypt() error {
 		if i.instance.Keys[i].Used {
 			continue
 		}
-		if Contains(&t.Recipients, &t.instance.Keys[i].Keepers) {
+		if AllNeedlesInHaystack(&t.Recipients, &t.instance.Keys[i].Keepers) {
 			// Found a key
 			// Mark the key as Used
 			t.instance.Keys[i].Used = true
-			// if !Decrypted, decrypt the key
+			// if !Decrypt, decrypt the key
 			// copy Key.Id to Text.KeyId
 			t.KeyId = t.instance.Keys[i].Id
 			keyPtr = &t.instance.Keys[i].Runes
 			break
 		}
 	}
-
 	if keyPtr == nil {
-		return errors.New("Did not find a key where all Recipients are Keepers of the same key")
+		return nil, errors.New("Did not find a key where all Recipients are Keepers of the same key")
 	}
 	if len(t.KeyId) < t.instance.GroupSize {
-		return errors.New("KeyId is empty or less than GroupSize")
+		return nil, errors.New("KeyId is empty or less than GroupSize")
 	}
+	return keyPtr, nil
+}
 
-	// continue here, we have the keyPtr to pass to encipher()
+// Encipher enciphers the PlainText field into the CipherText field of a Text
+// structure and wipes the PlainText field. Verbs like encrypt and decrypt are
+// only used for AES-256 encryption/decryption of fields in the json savefile
+// (and to encrypt the json output file itself), while words encipher and
+// decipher are used for message ciphering in Krypto431.
+func (t *Text) Encipher() error {
+	keyPtr, err := t.EnrichWithKey()
+	if err != nil {
+		return err
+	}
+	// keyPtr is assumed not to be nil, at least that is the design of EnrichWithKey
+
+	Wipe(&t.CipherText)
+	state := newState()
+
+	for i := range p.PlainText {
+		err := state.encodeCharacter(&t.PlainText[i], t)
+		if err != nil {
+			return err
+		}
+	}
+	//continue here
+	return nil
+
 }

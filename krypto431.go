@@ -360,11 +360,11 @@ func WithMakeTextFiles(b bool) Option {
 	}
 }
 
-// Contains returns true is all needles can be found in the haystack, but if
-// one slice in the haystack is a star (*) it will always return true. Intended
-// to find Keepers of Keys where needles are Text.Recipients and haystack is
-// Key.Keepers.
-func Contains(needles *[][]rune, haystack *[][]rune) bool {
+// AllNeedlesInHaystack returns true is all needles can be found in the
+// haystack, but if one slice in the haystack is a star (*) it will always
+// return true. Intended to find Keepers of Keys where needles are
+// Text.Recipients and haystack is Key.Keepers.
+func AllNeedlesInHaystack(needles *[][]rune, haystack *[][]rune) bool {
 	if needles == nil || haystack == nil {
 		return false
 	}

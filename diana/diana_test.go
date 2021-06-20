@@ -1,6 +1,9 @@
 package diana
 
-import "testing"
+import (
+	"bytes"
+	"testing"
+)
 
 func TestTrigraphRune(t *testing.T) {
 	testTable := []struct {
@@ -210,6 +213,65 @@ func TestTrigraphByteInvalidCharacters(t *testing.T) {
 		err := TrigraphByte(&output, &test.a, &test.b)
 		if err == nil {
 			t.Error("Expected non A to Z character input to fail")
+		}
+	}
+}
+
+func TestAppendTrigraphByteByKey(t *testing.T) {
+	scenarios := []struct {
+		expected []byte
+		text     []byte
+		key      []byte
+	}{
+		{[]byte("HELLOWORLD"), []byte("HELLOWORLD"), []byte("LRDDXHXRDT")},
+	}
+
+	for _, test := range scenarios {
+		keyIndex := int(0)
+		output := make([]byte, 0, 20)
+		for i := range test.text {
+			err := AppendTrigraphByteByKey(&output, &test.text[i], &test.key, &keyIndex)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if bytes.Compare(output, test.expected) != 0 {
+			t.Errorf("Not the same: %c and %c", output, test.expected)
+		}
+	}
+}
+
+func TestAppendTrigraphByteByKeyBadInput(t *testing.T) {
+	var (
+		key         []byte = []byte("LRDDXHXRDT")
+		idx         int    = int(0)
+		negativeIdx int    = int(-1)
+		tooLargeIdx int    = int(1)
+		output      []byte
+		char        byte = byte('A')
+		badChar     byte = byte('a')
+	)
+
+	scenarios := []struct {
+		writeTo   *[]byte
+		character *byte
+		key       *[]byte
+		keyIndex  *int
+	}{
+		{nil, nil, nil, nil},
+		{nil, &char, &key, &idx},
+		{&output, &char, nil, &idx},
+		{&output, &char, &key, nil},
+		{&output, nil, &key, &idx},
+		{&output, &char, &key, &negativeIdx},
+		{&output, &char, &key, &tooLargeIdx},
+		{&output, &badChar, &key, &idx},
+	}
+
+	for _, test := range scenarios {
+		err := AppendTrigraphByteByKey(test.writeTo, test.character, test.key, test.keyIndex)
+		if err == nil {
+			t.Error("Expected AppendTrigraphByteByKey too fail!")
 		}
 	}
 }
