@@ -156,27 +156,31 @@ func appendRune(slice *[]rune, r *rune) {
 func (state *codecState) nextTable(t *Text) {
 	state.table = (state.table + 1) % state.numberOfTables
 	if t != nil {
-		appendRune(&t.EncodedText, *nextTableChar)
+		t.EncodedText = append(t.EncodedText, nextTableChar)
+		//appendRune(&t.EncodedText, nextTableChar)
 	}
 }
+
 func (state *codecState) toggleCase(t *Text) error {
 	if t != nil {
 		err := state.gotoTable(secondaryTable, t)
 		if err != nil {
 			return err
 		}
-		appendRune(&t.EncodedText, *caseToggleChar)
+		t.EncodedText = append(t.EncodedText, caseToggleChar)
+		//appendRune(&t.EncodedText, *caseToggleChar)
 	}
 	state.shift = !state.shift
 	return nil
 }
-func (state *codecState) toggleBinary(p *PlainText) error {
-	if p != nil {
-		err := state.gotoTable(secondaryTable, p)
+func (state *codecState) toggleBinary(t *Text) error {
+	if t != nil {
+		err := state.gotoTable(secondaryTable, t)
 		if err != nil {
 			return err
 		}
-		appendRune(&p.EncodedText, *binaryToggleChar)
+		t.EncodedText = append(t.EncodedText, binaryToggleChar)
+		//appendRune(&p.EncodedText, *binaryToggleChar)
 	}
 	state.binary = !state.binary
 	return nil
@@ -185,27 +189,27 @@ func (state *codecState) toggleBinary(p *PlainText) error {
 // gotoTable takes you to a specific table while also adding nextTableChar to
 // a PlainText EncodedText field. It will not write anything to the output if
 // you are already on the specific table according to the state.
-func (state *codecState) gotoTable(t int, p *PlainText) error {
-	if t < 0 || t >= state.numberOfTables {
-		return fmt.Errorf("table number out of range: %d not between 0 and %d", t, state.numberOfTables)
+func (state *codecState) gotoTable(table int, t *Text) error {
+	if table < 0 || table >= state.numberOfTables {
+		return fmt.Errorf("table number out of range: %d not between 0 and %d", table, state.numberOfTables)
 	}
-	if state.table == t {
+	if state.table == table {
 		// we are already in the requested table, return
 		return nil
 	}
-	if t == primaryTable && state.table == secondaryTable && !state.binary && !state.shift {
+	/* 	if table == primaryTable && state.table == secondaryTable && !state.binary && !state.shift {
 		// ...we can use the resetAll character
-		err := state.reset(p)
+		err := state.reset(t)
 		if err != nil {
 			return err
 		}
 		return nil
-	}
+	} */
 	for {
-		if t == state.table {
+		if table == state.table {
 			break
 		}
-		state.nextTable(p)
+		state.nextTable(t)
 	}
 	return nil
 }
@@ -215,11 +219,11 @@ func (state *codecState) gotoTable(t int, p *PlainText) error {
 // rune that can not be found in one of the tables appear, we switch to binary
 // mode and will not exit this mode unless reaching the end or running out of
 // key runes (where it will switch to the next key).
-func (state *codecState) encodeCharacter(input *rune, t *Text) error {
+func (state *codecState) encodeCharacter(input *rune, txt *Text) error {
 	if !state.binary {
 		if (isUpper(input) && state.shift) || (isLower(input) && !state.shift) {
 			// need to shift/unshift...
-			err := state.toggleCase(p)
+			err := state.toggleCase(txt)
 			if err != nil {
 				return err
 			}
@@ -236,12 +240,12 @@ func (state *codecState) encodeCharacter(input *rune, t *Text) error {
 				}
 				if c == tc {
 					foundIt = true
-					err := state.gotoTable(t, p)
+					err := state.gotoTable(t, txt)
 					if err != nil {
 						return err
 					}
 					char := rune(i) + rune('A')
-					appendRune(&p.EncodedText, char)
+					appendRune(&txt.EncodedText, char)
 					break
 				}
 			}
@@ -261,7 +265,7 @@ func (state *codecState) encodeCharacter(input *rune, t *Text) error {
 	return nil
 }
 
-func (state *codecState) decodeCharacter(input *rune, p *PlainText) error {
+func (state *codecState) decodeCharacter(input *rune, txt *Text) error {
 	if !state.binary {
 	} else {
 		panic("binary mode not implemented yet")
@@ -274,12 +278,12 @@ func (state *codecState) decodeCharacter(input *rune, p *PlainText) error {
 // needed to make a key change) long and add a star (*) as a placeholder for a
 // key. In order to encrypt this encoded message you need to have key(s) of the
 // correct length available in the database or encryption will fail.
-func (p *PlainText) Encode() error {
+func (p *Text) Encode() error {
 	Wipe(&p.EncodedText)
 	state := newState()
 
-	for i := range p.Text {
-		err := state.encodeCharacter(&p.Text[i], p)
+	for i := range p.PlainText {
+		err := state.encodeCharacter(&p.PlainText[i], p)
 		if err != nil {
 			return err
 		}
@@ -289,8 +293,8 @@ func (p *PlainText) Encode() error {
 }
 
 // Decode decodes the EncodedText field into the Text field of a PlainText struct
-func (p *PlainText) Decode() error {
-	Wipe(&p.Text)
+func (p *Text) Decode() error {
+	Wipe(&p.PlainText)
 	state := newState()
 
 	for i := range p.EncodedText {
