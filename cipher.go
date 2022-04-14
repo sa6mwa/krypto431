@@ -6,28 +6,37 @@ import (
 )
 
 var (
-	CharacterTablePrimary   []rune   = []rune(`ABCDEFGHIJKLMNOP RSTUVWXY¤`)
-	CharacterTableSecondary []rune   = []rune(`0123456789ÅÄÖÆØ¤Q¤Z¤¤¤¤¤¤¤`)
-	CharacterTableTertiary  []rune   = []rune(`{}:,\[]"?!@#%&*.?-/+_=¤¤¤¤`)
-	CharacterTables         [][]rune = [][]rune{
-		CharacterTablePrimary, CharacterTableSecondary, CharacterTableTertiary,
+	CharacterTablePrimary   []rune = []rune(`ABCDEFGHIJKLMNOP RSTUVWXY¤`)
+	CharacterTableSecondary []rune = []rune(`0123456789?-ÅÄÖ.Q,Z:+/¤¤¤¤`)
+
+	// Z = change character table
+	// Q in 1st = space
+	// Q in 2nd = Q
+	// S in 2nd = Z
+	// W in 2nd = switch to binary mode, 1 byte is 2 runes, A to P is one nibble (4 bits, 1-16)
+	// X in 2nd = switch case (toggle case like capslock)
+	// Y in 2nd = change key (followed by 5 character key after which the table is reset)
+
+	//CharacterTablePrimary   []rune   = []rune(`ABCDEFGHIJKLMNOP RSTUVWXY¤`)
+	//CharacterTableSecondary []rune   = []rune(`0123456789ÅÄÖÆØ¤Q¤Z¤¤¤¤¤¤¤`)
+	//CharacterTableTertiary  []rune   = []rune(`{}:,\[]"?!@#%&*.?-/+_=¤¤¤¤`)
+	CharacterTables [][]rune = [][]rune{
+		CharacterTablePrimary, CharacterTableSecondary,
 	}
 )
 
 const (
 	primaryTable   int = 0
 	secondaryTable int = 1
-	tertiaryTable  int = 2
-)
+	//tertiaryTable  int = 2
 
-const (
 	// specialOpChar was dummyChar, means character has special meaning, see below...
 	// specialOpChar will be replaced by zeroes during initialization (0x00)
 	specialOpChar rune = '¤'
 
 	// caseToggleChar adds strings.ToLower() on every character depending on previous
 	// state (stateShift).
-	caseToggleChar rune = 'V'
+	caseToggleChar rune = 'X'
 
 	// binaryModeChar changes into a binary-only mode where A-P is one nibble
 	// (meaning that 1 rune is 2 characters). To exit the binary mode, issue W
@@ -38,7 +47,7 @@ const (
 	// resetAllChar re-initializes everything and goes back to the primary
 	// character table, resetAllChar is (so far) in both the primary and the
 	// secondary character table.
-	resetAllChar rune = 'X'
+	//resetAllChar rune = 'X'
 
 	// changeKeyChar instructs that immediately after this character is the key
 	// id (always 1 group) to change to. After the key (1 group) has been
@@ -79,7 +88,7 @@ func isLetter(c rune) bool {
 }
 */
 
-func toUpper(c *rune) {
+func toUpper(c *rune, b *rune) {
 	var diff rune = 'a' - 'A'
 	if *c >= 'a' && *c <= 'z' {
 		*b = *c - diff
@@ -119,13 +128,21 @@ func newState() *codecState {
 	}
 }
 
-func (state *codecState) reset(p *Text) error {
+func appendRune(slice *[]rune, r *rune) {
+	// capacity of the underlying array should have been setup not to cause
+	// reallocation (based on maximum message size length, by default 100 *
+	// keylength = 100*200 = 20000 characters/runes/bytes).
+	// TODO: Add warning when slice capacity is about to be reached.
+	*slice = append(*slice, *r)
+}
+
+/* func (state *codecState) reset(p *Text) error {
 	if p != nil {
 		err := state.gotoTable(secondaryTable, p)
 		if err != nil {
 			return err
 		}
-		appendByte(&p.CipherText, resetAllChar)
+		appendRune(&p.CipherText, resetAllChar)
 	}
 	state.table = 0
 	state.numberOfTables = len(CharacterTables)
@@ -134,19 +151,21 @@ func (state *codecState) reset(p *Text) error {
 	state.lowerNibble = false
 	return nil
 }
+*/
+
 func (state *codecState) nextTable(t *Text) {
 	state.table = (state.table + 1) % state.numberOfTables
-	if p != nil {
-		appendByte(&t.EncodedText, nextTableChar)
+	if t != nil {
+		appendRune(&t.EncodedText, *nextTableChar)
 	}
 }
 func (state *codecState) toggleCase(t *Text) error {
-	if p != nil {
-		err := state.gotoTable(secondaryTable, p)
+	if t != nil {
+		err := state.gotoTable(secondaryTable, t)
 		if err != nil {
 			return err
 		}
-		appendByte(&t.EncodedText, caseToggleChar)
+		appendRune(&t.EncodedText, *caseToggleChar)
 	}
 	state.shift = !state.shift
 	return nil
@@ -157,7 +176,7 @@ func (state *codecState) toggleBinary(p *PlainText) error {
 		if err != nil {
 			return err
 		}
-		appendByte(&p.EncodedText, binaryToggleChar)
+		appendRune(&p.EncodedText, *binaryToggleChar)
 	}
 	state.binary = !state.binary
 	return nil
@@ -222,7 +241,7 @@ func (state *codecState) encodeCharacter(input *rune, t *Text) error {
 						return err
 					}
 					char := rune(i) + rune('A')
-					appendByte(&p.EncodedText, char)
+					appendRune(&p.EncodedText, char)
 					break
 				}
 			}

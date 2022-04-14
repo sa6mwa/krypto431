@@ -21,13 +21,13 @@ type Krypto431 interface {
 // defaults
 const (
 	defaultGroupSize     int  = 5
-	defaultKeyLength     int  = 200
+	defaultKeyLength     int  = 280 // same as Twitter
 	defaultColumns       int  = 80
 	defaultMakePDF       bool = false
 	defaultMakeTextFiles bool = false
 	useCrandWipe         bool = true
-	DefaultKeyCapacity   int  = 100
-	DefaultTextCapacity  int  = 100
+	DefaultKeyCapacity   int  = 280
+	DefaultTextCapacity  int  = defaultKeyLength * 20 // 5600
 )
 
 // Instance stores generated keys, plaintext, ciphertext, callsign(s) and
@@ -61,25 +61,28 @@ type Key struct {
 }
 
 // Text holds plaintext and ciphertext. To encrypt, you need to populate the
-// PlainText and Recipients fields, the rest will be updated by the Encrypt
-// function which will choose the next available key. If PlainText is longer
-// than the key, the Encrypt function will use another key where the key's
-// Keepers field matches all of the Recipients. If there are not enough keys to
-// encrypt the message, Encrypt will fail. Encrypt will cache all non-used keys
-// from the database matching the Recipients into the instance Keys slice
-// before enciphering. To decrypt you need to have ciphertext in the CipherText
-// field and the start KeyId. There is no method (yet) to figure out which of
-// your keys can be used to decipher the message. If the KeyId is not already
-// in your instace's Keys slice it will be fetched from the database or fail.
-// The KeyId should be the first group in your received message.
+// PlainText (OR Binary) and Recipients fields, the rest will be updated by the
+// Encrypt function which will choose the next available key. If PlainText is
+// longer than the key, the Encrypt function will use another key where the
+// key's Keepers field matches all of the Recipients. If there are not enough
+// keys to encrypt the message, Encrypt will fail. Encrypt will cache all
+// non-used keys from the database matching the Recipients into the instance
+// Keys slice before enciphering. To decrypt you need to have ciphertext in the
+// CipherText field and the start KeyId. All binary data in the message will be
+// appended to the Binary field. There is no method (yet) to figure out which of
+// your keys can be used to decipher the message. If the KeyId is not already in
+// your instace's Keys slice it will be fetched from the database or fail. The
+// KeyId should be the first group in your received message.
 type Text struct {
-	GroupCount int      `json:",omitempty"`
-	KeyId      []rune   `json:",omitempty"`
-	PlainText  []rune   `json:",omitempty"`
-	CipherText []rune   `json:",omitempty"`
-	Recipients [][]rune `json:",omitempty"`
-	Decrypted  bool
-	instace    *Instance
+	GroupCount  int      `json:",omitempty"`
+	KeyId       []rune   `json:",omitempty"`
+	PlainText   []rune   `json:",omitempty"`
+	EncodedText []rune   `json:",omitempty"`
+	Binary      []byte   `json:",omitempty"`
+	CipherText  []rune   `json:",omitempty"`
+	Recipients  [][]rune `json:",omitempty"`
+	Decrypted   bool
+	instance    *Instance
 }
 
 // Wipe wipes a rune slice.
@@ -184,7 +187,7 @@ func groups(input *[]rune, groupsize int) (*[]rune, error) {
 	if groupsize <= 0 {
 		return nil, errors.New("Groupsize must be above 0")
 	}
-	output := make([]rune, 0, int(math.Ceil(float64(len(*input))/float64(groupsize))*(groupsize+1)))
+	output := make([]rune, 0, int(math.Ceil(float64(len(*input))/float64(groupsize)))*(groupsize+1))
 	runeCount := 0
 	for i := 0; i < len(*input); i++ {
 		output = append(output, (*input)[i])
@@ -310,7 +313,7 @@ func New(opts ...Option) Instance {
 	}
 	if i.MyCallSigns == nil {
 		// KA = Kilo Alpha = Kalle Anka = Donald Duck
-		defaultCallSigns := []rune{[]rune("KA")}
+		defaultCallSigns := [][]rune{[]rune("KA")}
 		i.MyCallSigns = &defaultCallSigns
 	}
 	return i
@@ -321,7 +324,7 @@ type Option func(r *Instance)
 
 func WithCallSign(cs *[]rune) Option {
 	return func(r *Instance) {
-		r.MyCallSigns = append(r.MyCallSigns, *cs)
+		*r.MyCallSigns = append(*r.MyCallSigns, *cs)
 	}
 }
 func WithCallSigns(css *[][]rune) Option {
