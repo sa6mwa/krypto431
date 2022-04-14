@@ -3,11 +3,11 @@ package main
 import (
 	"fmt"
 
-	"github.com/sa6mwa/krypto431/pkg/krypto"
+	"github.com/sa6mwa/krypto431"
 )
 
 func main() {
-	k := krypto.New()
+	k := krypto431.New()
 
 	for i := 0; i < 3; i++ {
 		k.GenerateOneKey()
@@ -15,12 +15,12 @@ func main() {
 
 	for i := range k.Keys {
 		groups := k.Keys[i].Groups()
-		fmt.Printf("%d:\n'%s'\n\n", len(k.Keys[i].Bytes), string(groups))
+		fmt.Printf("%d:\n'%s'\n\n", len(k.Keys[i].Runes), string(groups))
 		//krypto.Wipe(groups)
 	}
 
 	k.Wipe()
 
-	//fmt.Printf("%v\n", k.Keys)
+	fmt.Printf("%v\n", k.Keys)
 
 }
