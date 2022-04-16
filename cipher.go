@@ -56,13 +56,6 @@ const (
 
 	// nextTableChar switches to the next table (if 3 table, then mod(3))
 	nextTableChar rune = 'Z'
-
-	// I to R, T, U, V, W, and Y are so far reserved in the third character table
-	// (X and Z have the same meaning as in the secondary table)
-
-	// Note on section change: ZUUX (change to secondary table, ==, reset) can be
-	// used to separate one section from the other (header from message from
-	// footer section for example). This is the same
 )
 
 func isUpper(c *rune) bool {
@@ -98,15 +91,15 @@ func toUpper(c *rune, b *rune) {
 	return
 }
 
-/*
-func toLower(c *rune) (b rune) {
+func toLower(c *rune, b *rune) {
 	var diff rune = 'a' - 'A'
 	if *c >= 'A' && *c <= 'Z' {
-		b = *c + diff
+		*b = *c + diff
+	} else {
+		*b = *c
 	}
 	return
 }
-*/
 
 type codecState struct {
 	keyIndex       int
@@ -131,7 +124,7 @@ func newState() *codecState {
 func appendRune(slice *[]rune, r *rune) {
 	// capacity of the underlying array should have been setup not to cause
 	// reallocation (based on maximum message size length, by default 100 *
-	// keylength = 100*200 = 20000 characters/runes/bytes).
+	// keylength = 100*300 = 30000 characters/runes/bytes).
 	// TODO: Add warning when slice capacity is about to be reached.
 	*slice = append(*slice, *r)
 }
@@ -173,6 +166,7 @@ func (state *codecState) toggleCase(t *Text) error {
 	state.shift = !state.shift
 	return nil
 }
+
 func (state *codecState) toggleBinary(t *Text) error {
 	if t != nil {
 		err := state.gotoTable(secondaryTable, t)

@@ -21,13 +21,13 @@ type Krypto431 interface {
 // defaults
 const (
 	defaultGroupSize     int  = 5
-	defaultKeyLength     int  = 280 // same as Twitter
+	defaultKeyLength     int  = 300
 	defaultColumns       int  = 80
 	defaultMakePDF       bool = false
 	defaultMakeTextFiles bool = false
 	useCrandWipe         bool = true
-	DefaultKeyCapacity   int  = 280
-	DefaultTextCapacity  int  = defaultKeyLength * 20 // 5600
+	DefaultKeyCapacity   int  = defaultKeyLength
+	DefaultTextCapacity  int  = defaultKeyLength * 20 // 6000
 )
 
 // Instance stores generated keys, plaintext, ciphertext, callsign(s) and
@@ -46,6 +46,12 @@ type Instance struct {
 	MyCallSigns   *[][]rune `json:",omitempty"`
 }
 
+// Methods attached to Instance struct:
+// GenerateOneKey()
+// GenerateKeys()
+// GenerateKeyId()
+// ContainsKeyId()
+
 // Key struct holds a key. Keepers is a list of callsigns or other identifiers
 // that have access to this key (and can use it for encryption/decryption). The
 // proper procedure is to share the key with it's respective keeper(s). By
@@ -59,6 +65,8 @@ type Key struct {
 	Decrypted bool
 	instance  *Instance
 }
+
+// Methods attached to Key struct:
 
 // Text holds plaintext and ciphertext. To encrypt, you need to populate the
 // PlainText (OR Binary) and Recipients fields, the rest will be updated by the
@@ -84,6 +92,8 @@ type Text struct {
 	Decrypted   bool
 	instance    *Instance
 }
+
+// Methods attached to Text struct:
 
 // Wipe wipes a rune slice.
 func Wipe(b *[]rune) error {
@@ -241,7 +251,7 @@ func (t *Text) Wipe() {
 	}
 }
 
-// RandomWipe assigned method for Text wipes PlainText, CipherText, GroupCount
+// RandomWipe assigned method for Text wipes PlainText, EncodedText, CipherText, GroupCount
 // and KeyId fields.
 func (t *Text) RandomWipe() {
 	// wipe PlainText
@@ -252,6 +262,14 @@ func (t *Text) RandomWipe() {
 		}
 	}
 	t.PlainText = nil
+	// wipe EncodedText
+	written, err := crand.ReadRunes(t.EncodedText)
+	if err != nil || written != len(t.EncodedText) {
+		for i := 0; i < len(t.EncodedText); i++ {
+			t.EncodedText[i] = 0
+		}
+	}
+	t.EncodedText = nil
 	// wipe CipherText
 	written, err = crand.ReadRunes(t.CipherText)
 	if err != nil || written != len(t.CipherText) {
@@ -280,6 +298,11 @@ func (t *Text) ZeroWipe() {
 		t.PlainText[i] = 0
 	}
 	t.PlainText = nil
+	// wipe EncodedText
+	for i := 0; i < len(t.EncodedText); i++ {
+		t.EncodedText[i] = 0
+	}
+	t.EncodedText = nil
 	// wipe CipherText
 	for i := 0; i < len(t.CipherText); i++ {
 		t.CipherText[i] = 0
@@ -302,8 +325,8 @@ func New(opts ...Option) Instance {
 		Columns:       defaultColumns,
 		MakePDF:       defaultMakePDF,
 		MakeTextFiles: defaultMakeTextFiles,
-		Keys:          make([]Key, 0, DefaultKeyCapacity),
-		Texts:         make([]Text, 0, DefaultTextCapacity),
+		Keys:          make([]Key, 0, 0),
+		Texts:         make([]Text, 0, 0),
 	}
 	for _, opt := range opts {
 		opt(&i)

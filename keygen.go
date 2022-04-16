@@ -30,11 +30,11 @@ func (r *Instance) GenerateKeyId(key *Key) error {
 		for i := range key.Id {
 			key.Id[i] = rune(crand.Intn(26)) + rune('A')
 		}
-		if !r.ContainsKeyId(key.Id) {
+		if !r.ContainsKeyId(&key.Id) {
 			break
 		}
 		// 2 next lines for debugging, will be removed
-		_, fn, line := runtime.Caller(1)
+		_, fn, line, _ := runtime.Caller(1)
 		fmt.Printf("key exists looping (%s line %d)\n", fn, line)
 	}
 	return nil
@@ -49,7 +49,7 @@ func (r *Instance) GenerateOneKey() error {
 	groupsToGenerate := int(math.Ceil(float64(r.KeyLength) / float64(r.GroupSize)))
 	err := r.GenerateKeyId(&key)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	key.Runes = make([]rune, int(groupsToGenerate*r.GroupSize))
 	for i := range key.Runes {
