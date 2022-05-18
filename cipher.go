@@ -56,13 +56,6 @@ const (
 
 	// nextTableChar switches to the next table (if 3 table, then mod(3))
 	nextTableChar rune = 'Z'
-
-	// I to R, T, U, V, W, and Y are so far reserved in the third character table
-	// (X and Z have the same meaning as in the secondary table)
-
-	// Note on section change: ZUUX (change to secondary table, ==, reset) can be
-	// used to separate one section from the other (header from message from
-	// footer section for example). This is the same
 )
 
 func isUpper(c *rune) bool {
@@ -98,15 +91,15 @@ func toUpper(c *rune, b *rune) {
 	return
 }
 
-/*
-func toLower(c *rune) (b rune) {
+func toLower(c *rune, b *rune) {
 	var diff rune = 'a' - 'A'
 	if *c >= 'A' && *c <= 'Z' {
-		b = *c + diff
+		*b = *c + diff
+	} else {
+		*b = *c
 	}
 	return
 }
-*/
 
 type codecState struct {
 	keyIndex       int
@@ -131,7 +124,7 @@ func newState() *codecState {
 func appendRune(slice *[]rune, r *rune) {
 	// capacity of the underlying array should have been setup not to cause
 	// reallocation (based on maximum message size length, by default 100 *
-	// keylength = 100*200 = 20000 characters/runes/bytes).
+	// keylength = 100*300 = 30000 characters/runes/bytes).
 	// TODO: Add warning when slice capacity is about to be reached.
 	*slice = append(*slice, *r)
 }
@@ -283,8 +276,7 @@ func (state *codecState) decodeCharacter(input *rune, output *[]rune) error {
 // needed to make a key change) long and add a star (*) as a placeholder for a
 // key. In order to encrypt this encoded message you need to have key(s) of the
 // correct length available in the database or encryption will fail.
-func (t *Text) Encode() error {
-	Wipe(&t.EncodedText)
+func (t *Text) Encode() *[]rune {
 	state := newState()
 
 	encodedText := make([]rune, 0, len(t.PlainText)*2)
@@ -294,17 +286,16 @@ func (t *Text) Encode() error {
 		// if x >= KeyLength-GroupSize-2, add star for key-change and reset x to 0
 		err := state.encodeCharacter(&t.PlainText[i], &encodedText)
 		if err != nil {
-			return err
+			Wipe(&encodedText)
+			return nil
 		}
 		x++
 	}
-	t.EncodedText = encodedText
-	Wipe(&encodedText)
 	//continue here
-	return nil
+	return &encodedText
 }
 
-// Decode decodes the EncodedText field into the Text field of a PlainText struct
+/* // Decode decodes the EncodedText field into the Text field of a PlainText struct
 func (t *Text) Decode() error {
 	Wipe(&t.PlainText)
 	state := newState()
@@ -319,6 +310,7 @@ func (t *Text) Decode() error {
 	Wipe(&decodedText)
 	return nil
 }
+*/
 
 // EnrichWithKey finds the first appropriate key for this Text structure where
 // each of the Text's Recipients are Keepers of the same key. It returns a

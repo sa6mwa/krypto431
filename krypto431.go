@@ -76,15 +76,14 @@ type Key struct {
 // your instace's Keys slice it will be fetched from the database or fail. The
 // KeyId should be the first group in your received message.
 type Text struct {
-	GroupCount  int      `json:",omitempty"`
-	KeyId       []rune   `json:",omitempty"`
-	PlainText   []rune   `json:",omitempty"`
-	EncodedText []rune   `json:",omitempty"`
-	Binary      []byte   `json:",omitempty"`
-	CipherText  []rune   `json:",omitempty"`
-	Recipients  [][]rune `json:",omitempty"`
-	Decrypted   bool
-	instance    *Instance
+	GroupCount int      `json:",omitempty"`
+	KeyId      []rune   `json:",omitempty"`
+	PlainText  []rune   `json:",omitempty"`
+	Binary     []byte   `json:",omitempty"`
+	CipherText []rune   `json:",omitempty"`
+	Recipients [][]rune `json:",omitempty"`
+	Decrypted  bool
+	instance   *Instance
 }
 
 // Wipe wipes a rune slice.
