@@ -14,13 +14,14 @@ func main() {
 	}
 
 	for i := range k.Keys {
-		groups := k.Keys[i].Groups()
-		fmt.Printf("%d:\n'%s'\n\n", len(k.Keys[i].Runes), string(groups))
+		groups, err := k.Keys[i].Groups()
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("%d:\n'%s'\n\n", len(k.Keys[i].Runes), string(*groups))
 		//krypto.Wipe(groups)
 	}
 
-	k.Wipe()
-
-	fmt.Printf("%v\n", k.Keys)
+	k.Save()
 
 }

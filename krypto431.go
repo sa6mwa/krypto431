@@ -1,7 +1,9 @@
 package krypto431
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"math"
 	"sync"
@@ -153,15 +155,21 @@ func (k *Key) RandomWipe() error {
 	if k == nil {
 		return errors.New("Received a nil pointer")
 	}
-	written, err := crand.ReadRunes(k.Runes)
-	if err != nil || written != len(k.Runes) {
-		if err != nil {
-			log.Println(err.Error())
+	runeSlices := []*[]rune{&k.Runes, &k.Id}
+	for i := range runeSlices {
+		written, err := crand.ReadRunes(*runeSlices[i])
+		if err != nil || written != len(*runeSlices[i]) {
+			if err != nil {
+				log.Println(err.Error())
+			}
+			log.Printf("ERROR, wrote %d runes, but expected to write %d", written, len(*runeSlices[i]))
+			// zero-wipe rune slice instead...
+			for i := 0; i < len(*runeSlices[i]); i++ {
+				*runeSlices[i] = []rune{0}
+			}
 		}
-		log.Printf("ERROR, wrote %d runes, but expected to write %d", written, len(k.Runes))
-		k.ZeroWipe()
+		*runeSlices[i] = nil
 	}
-	k.Runes = nil
 	return nil
 }
 
@@ -174,6 +182,10 @@ func (k *Key) ZeroWipe() error {
 		k.Runes[i] = 0
 	}
 	k.Runes = nil
+	for i := 0; i < len(k.Id); i++ {
+		k.Id[i] = 0
+	}
+	k.Id = nil
 	return nil
 }
 
@@ -407,9 +419,19 @@ func (r *Instance) Wipe() {
 	for i := range r.Keys {
 		r.Keys[i].Wipe()
 	}
+	r.Keys = nil
 	for i := range r.Texts {
 		r.Texts[i].Wipe()
 	}
+	r.Texts = nil
+}
+
+func (r *Instance) Save() {
+	j, err := json.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(string(j))
 }
 
 // TODO: Implement! :)

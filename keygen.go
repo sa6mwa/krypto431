@@ -22,43 +22,37 @@ func (r *Instance) ContainsKeyId(keyId *[]rune) bool {
 	return false
 }
 
-// GenerateKeyId generates an Id. The current implementation simply generates a
-// random group not in the Instance construct.
-func (r *Instance) GenerateKeyId(key *Key) error {
-	key.Id = make([]rune, r.GroupSize)
+// NewKey generates a new key. The current implementation generates a random
+// group not in the Instance construct.
+func (r *Instance) NewKey() *Key {
+	key := Key{
+		Id:        make([]rune, r.GroupSize),
+		Runes:     make([]rune, int(int(math.Ceil(float64(r.KeyLength)/float64(r.GroupSize)))*r.GroupSize)),
+		Used:      false,
+		Decrypted: true,
+		instance:  r,
+	}
 	for { // if we already have 26*26*26*26*26 keys, this is an infinite loop :)
 		for i := range key.Id {
 			key.Id[i] = rune(crand.Intn(26)) + rune('A')
 		}
-		if !r.ContainsKeyId(key.Id) {
+		if !r.ContainsKeyId(&key.Id) {
 			break
 		}
 		// 2 next lines for debugging, will be removed
-		_, fn, line := runtime.Caller(1)
+		_, fn, line, _ := runtime.Caller(1)
 		fmt.Printf("key exists looping (%s line %d)\n", fn, line)
 	}
-	return nil
-}
-
-// GenerateOneKey generates a single key and appends it to the Instance.Keys
-// slice returning a pointer to the Key object
-func (r *Instance) GenerateOneKey() error {
-	// define a temporary key
-	var key Key
-	key.instance = r
-	groupsToGenerate := int(math.Ceil(float64(r.KeyLength) / float64(r.GroupSize)))
-	err := r.GenerateKeyId(&key)
-	if err != nil {
-		return nil, err
-	}
-	key.Runes = make([]rune, int(groupsToGenerate*r.GroupSize))
 	for i := range key.Runes {
 		key.Runes[i] = rune(crand.Intn(26)) + rune('A')
 	}
-	// append will copy key to the Keys slice
-	r.Keys = append(r.Keys, key)
-	// wipe the temporary key
-	key.Wipe()
+	return &key
+}
+
+// GenerateOneKey generates a single key and appends it to the Instance.Keys
+// slice
+func (r *Instance) GenerateOneKey() error {
+	r.Keys = append(r.Keys, *r.NewKey())
 	return nil
 }
 
