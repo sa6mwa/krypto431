@@ -22,6 +22,6 @@ func main() {
 		//krypto.Wipe(groups)
 	}
 
-	k.Save()
+	//k.Save()
 
 }
