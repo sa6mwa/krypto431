@@ -1,3 +1,8 @@
+O: 000
+S: We need a very minimal, but working krypto431 API code ASAP.
+M: Finish missing functionality with least resistance
+E: Initially encipher 002, thereafter decipher 003, finally persistence 001.
+
 
 O: 001
 S: We need to persist keys, texts, which keys have already been used, etc. We need to persist Krypto431 structs.

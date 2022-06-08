@@ -130,7 +130,7 @@ func appendRune(slice *[]rune, r *rune) {
 }
 
 /*
-func (state *codecState) reset(p *Text) error {
+func (state *codecState) reset(p *Message) error {
 	if p != nil {
 		err := state.gotoTable(secondaryTable, p)
 		if err != nil {
@@ -270,13 +270,13 @@ func (state *codecState) decodeCharacter(input *rune, output *[]rune) error {
 	return nil
 }
 
-// Encode codes the Text field into the EncodedText field of a PlainText
+// Encode codes the PlainText field into the EncodedText field of a Message
 // struct. Encode will prepend one star (*) in the beginning and add a key
 // change if the message is more than Instance.KeyLength (minus characters
 // needed to make a key change) long and add a star (*) as a placeholder for a
 // key. In order to encrypt this encoded message you need to have key(s) of the
 // correct length available in the database or encryption will fail.
-func (t *Text) Encode() *[]rune {
+func (t *Message) Encode() *[]rune {
 	state := newState()
 
 	encodedText := make([]rune, 0, len(t.PlainText)*2)
@@ -295,8 +295,8 @@ func (t *Text) Encode() *[]rune {
 	return &encodedText
 }
 
-/* // Decode decodes the EncodedText field into the Text field of a PlainText struct
-func (t *Text) Decode() error {
+/* // Decode decodes the EncodedText field into the PlainText field of a Message struct
+func (t *Message) Decode() error {
 	Wipe(&t.PlainText)
 	state := newState()
 	decodedText := make([]rune, 0, len(t.EncodedText))
@@ -312,11 +312,11 @@ func (t *Text) Decode() error {
 }
 */
 
-// EnrichWithKey finds the first appropriate key for this Text structure where
-// each of the Text's Recipients are Keepers of the same key. It returns a
+// EnrichWithKey finds the first appropriate key for this Message structure where
+// each of the Messages Recipients are Keepers of the same key. It returns a
 // pointer to the key bytes/runes that will be used by diana.Trigraph later. It
 // also returns error in case no key was found or other error occurred.
-func (t *Text) EnrichWithKey() (*[]rune, error) {
+func (t *Message) EnrichWithKey() (*[]rune, error) {
 	if len(t.PlainText) == 0 {
 		return nil, errors.New("PlainText is empty")
 	}
@@ -340,7 +340,7 @@ func (t *Text) EnrichWithKey() (*[]rune, error) {
 			// Mark the key as Used
 			t.instance.Keys[i].Used = true
 			// if !Decrypt, decrypt the key
-			// copy Key.Id to Text.KeyId
+			// copy Key.Id to Message.KeyId
 			t.KeyId = t.instance.Keys[i].Id
 			keyPtr = &t.instance.Keys[i].Runes
 			break
@@ -355,12 +355,12 @@ func (t *Text) EnrichWithKey() (*[]rune, error) {
 	return keyPtr, nil
 }
 
-// Encipher enciphers the PlainText field into the CipherText field of a Text
+// Encipher enciphers the PlainText field into the CipherText field of a Message
 // structure and wipes the PlainText field. Verbs like encrypt and decrypt are
 // only used for AES-256 encryption/decryption of fields in the json savefile
 // (and to encrypt the json output file itself), while words encipher and
 // decipher are used for message ciphering in Krypto431.
-func (t *Text) Encipher() error {
+func (t *Message) Encipher() error {
 	//keyPtr, err := t.EnrichWithKey()
 	_, err := t.EnrichWithKey()
 	if err != nil {

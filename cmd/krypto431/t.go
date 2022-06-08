@@ -10,7 +10,7 @@ func main() {
 	k := krypto431.New()
 
 	for i := 0; i < 3; i++ {
-		k.GenerateOneKey()
+		fmt.Printf("Generated key with id: %s\n", string(*k.NewKey()))
 	}
 
 	for i := range k.Keys {
@@ -21,6 +21,8 @@ func main() {
 		fmt.Printf("%d:\n'%s'\n\n", len(k.Keys[i].Runes), string(*groups))
 		//krypto.Wipe(groups)
 	}
+
+	k.NewTextMessage("Hello world", "VQ")
 
 	//k.Save()
 

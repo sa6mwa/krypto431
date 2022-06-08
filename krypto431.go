@@ -22,14 +22,14 @@ type Krypto431 interface {
 
 // defaults
 const (
-	defaultGroupSize     int  = 5
-	defaultKeyLength     int  = 280 // same as Twitter
-	defaultColumns       int  = 80
-	defaultMakePDF       bool = false
-	defaultMakeTextFiles bool = false
-	useCrandWipe         bool = true
-	DefaultKeyCapacity   int  = 280
-	DefaultTextCapacity  int  = defaultKeyLength * 20 // 5600
+	defaultGroupSize       int  = 5
+	defaultKeyLength       int  = 280 // same as Twitter
+	defaultColumns         int  = 80
+	defaultMakePDF         bool = false
+	defaultMakeTextFiles   bool = false
+	useCrandWipe           bool = true
+	DefaultKeyCapacity     int  = 280
+	DefaultMessageCapacity int  = defaultKeyLength * 20 // 5600
 )
 
 // Instance stores generated keys, plaintext, ciphertext, callsign(s) and
@@ -42,7 +42,7 @@ type Instance struct {
 	KeyLength     int       `json:",omitempty"`
 	Columns       int       `json:",omitempty"`
 	Keys          []Key     `json:",omitempty"`
-	Texts         []Text    `json:",omitempty"`
+	Messages      []Message `json:",omitempty"`
 	MakePDF       bool      `json:",omitempty"`
 	MakeTextFiles bool      `json:",omitempty"`
 	MyCallSigns   *[][]rune `json:",omitempty"`
@@ -62,7 +62,7 @@ type Key struct {
 	instance  *Instance
 }
 
-// Text holds plaintext and ciphertext. To encrypt, you need to populate the
+// Message holds plaintext and ciphertext. To encrypt, you need to populate the
 // PlainText (OR Binary) and Recipients fields, the rest will be updated by the
 // Encrypt function which will choose the next available key. If PlainText is
 // longer than the key, the Encrypt function will use another key where the
@@ -75,7 +75,7 @@ type Key struct {
 // your keys can be used to decipher the message. If the KeyId is not already in
 // your instace's Keys slice it will be fetched from the database or fail. The
 // KeyId should be the first group in your received message.
-type Text struct {
+type Message struct {
 	GroupCount int      `json:",omitempty"`
 	KeyId      []rune   `json:",omitempty"`
 	PlainText  []rune   `json:",omitempty"`
@@ -222,8 +222,8 @@ func (k *Key) Groups() (*[]rune, error) {
 
 // Groups assigned method returns a []rune where each group is separated by
 // space.
-func (t *Text) Groups() (*[]rune, error) {
-	// There is no need to group the Text (non-encoded) field.
+func (t *Message) Groups() (*[]rune, error) {
+	// There is no need to group the Message (non-encoded) field.
 	return groups(&t.CipherText, t.instance.GroupSize)
 }
 
@@ -235,8 +235,8 @@ func (k *Key) GroupsBlock() (*[]rune, error) {
 	return nil, nil
 }
 
-// GroupsBlock for Text
-func (t *Text) GroupsBlock() (*[]rune, error) {
+// GroupsBlock for Message
+func (t *Message) GroupsBlock() (*[]rune, error) {
 	return nil, nil
 }
 
@@ -244,7 +244,7 @@ func (t *Text) GroupsBlock() (*[]rune, error) {
 // The order is highest priority first (plaintext), then ciphertext and finally
 // the groupcount and keyid. Nilling the rune slices should promote it for
 // garbage collection.
-func (t *Text) Wipe() {
+func (t *Message) Wipe() {
 	if useCrandWipe {
 		t.RandomWipe()
 	} else {
@@ -254,7 +254,7 @@ func (t *Text) Wipe() {
 
 // RandomWipe assigned method for Text wipes PlainText, CipherText, GroupCount
 // and KeyId fields.
-func (t *Text) RandomWipe() {
+func (t *Message) RandomWipe() {
 	// wipe PlainText
 	written, err := crand.ReadRunes(t.PlainText)
 	if err != nil || written != len(t.PlainText) {
@@ -285,7 +285,7 @@ func (t *Text) RandomWipe() {
 
 // ZeroWipe assigned method for PlainText writes zeroes to Text and EncodedText
 // fields.
-func (t *Text) ZeroWipe() {
+func (t *Message) ZeroWipe() {
 	// wipe PlainText
 	for i := 0; i < len(t.PlainText); i++ {
 		t.PlainText[i] = 0
@@ -314,7 +314,7 @@ func New(opts ...Option) Instance {
 		MakePDF:       defaultMakePDF,
 		MakeTextFiles: defaultMakeTextFiles,
 		Keys:          make([]Key, 0, DefaultKeyCapacity),
-		Texts:         make([]Text, 0, DefaultTextCapacity),
+		Messages:      make([]Message, 0, DefaultMessageCapacity),
 	}
 	for _, opt := range opts {
 		opt(&i)
@@ -377,7 +377,7 @@ func WithMakeTextFiles(b bool) Option {
 // AllNeedlesInHaystack returns true is all needles can be found in the
 // haystack, but if one slice in the haystack is a star (*) it will always
 // return true. Intended to find Keepers of Keys where needles are
-// Text.Recipients and haystack is Key.Keepers.
+// Message.Recipients and haystack is Key.Keepers.
 func AllNeedlesInHaystack(needles *[][]rune, haystack *[][]rune) bool {
 	if needles == nil || haystack == nil {
 		return false
@@ -419,10 +419,10 @@ func (r *Instance) Wipe() {
 		r.Keys[i].Wipe()
 	}
 	r.Keys = nil
-	for i := range r.Texts {
-		r.Texts[i].Wipe()
+	for i := range r.Messages {
+		r.Messages[i].Wipe()
 	}
-	r.Texts = nil
+	r.Messages = nil
 }
 
 func (r *Instance) Save() {
@@ -433,7 +433,25 @@ func (r *Instance) Save() {
 	fmt.Println(string(j))
 }
 
+// NewTextMessage() is a variadic function where first argument is the message,
+// second is a comma-separated list with recipients, third a key id to override
+// the key finder function and use a specific key (not marked "used"). First
+// argument is mandatory, rest are optional.
+func (r *Instance) NewTextMessage(msg ...string) error {
+
+	
+
+
+	message := Message{
+
+	}
+
+	return nil
+}
+
 // TODO: Implement! :)
+
+//func (r *Instance) NewBinaryMessage()
 
 //func (r *Instance) Encode(plaintext string) {}
 //func (r *Instance) Decode(plaintext string) {}

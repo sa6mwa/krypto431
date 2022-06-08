@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"runtime"
+	"strings"
 
 	"github.com/sa6mwa/krypto431/crand"
 )
@@ -24,14 +25,19 @@ func (r *Instance) ContainsKeyId(keyId *[]rune) bool {
 
 // NewKey generates a new key. The current implementation generates a random
 // group not in the Instance construct.
-func (r *Instance) NewKey() *Key {
+func (r *Instance) NewKey(keepers ...string) *[]rune {
 	key := Key{
-		Id:        make([]rune, r.GroupSize),
-		Runes:     make([]rune, int(int(math.Ceil(float64(r.KeyLength)/float64(r.GroupSize)))*r.GroupSize)),
-		Used:      false,
-		Decrypted: true,
-		instance:  r,
+		Id:       make([]rune, r.GroupSize),
+		Runes:    make([]rune, int(int(math.Ceil(float64(r.KeyLength)/float64(r.GroupSize)))*r.GroupSize)),
+		Used:     false,
+		instance: r,
 	}
+
+	for i := range keepers {
+		keeper := []rune(strings.TrimSpace(keepers[i]))
+		key.Keepers = append(key.Keepers, keeper)
+	}
+
 	for { // if we already have 26*26*26*26*26 keys, this is an infinite loop :)
 		for i := range key.Id {
 			key.Id[i] = rune(crand.Intn(26)) + rune('A')
@@ -46,23 +52,14 @@ func (r *Instance) NewKey() *Key {
 	for i := range key.Runes {
 		key.Runes[i] = rune(crand.Intn(26)) + rune('A')
 	}
-	return &key
-}
-
-// GenerateOneKey generates a single key and appends it to the Instance.Keys
-// slice
-func (r *Instance) GenerateOneKey() error {
-	r.Keys = append(r.Keys, *r.NewKey())
-	return nil
+	r.Keys = append(r.Keys, key)
+	return &key.Id
 }
 
 // GenerateKeys creates n amount of keys
 func (r *Instance) GenerateKeys(n int) error {
 	for i := 0; i < n; i++ {
-		err := r.GenerateOneKey()
-		if err != nil {
-			return err
-		}
+		_ = r.NewKey()
 	}
 	return nil
 }
