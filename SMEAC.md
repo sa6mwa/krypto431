@@ -1,3 +1,5 @@
+# KRYPTO431
+
 O: 000
 S: We need a very minimal, but working krypto431 API code ASAP.
 M: Finish missing functionality with least resistance
@@ -18,4 +20,8 @@ O: 003
 S: The decipher function is missing (decipher and decode)
 M: Write function to decipher CipherText into PlainText
 E: Finish 002 first, then refine this COA.
+
+
+
+
 

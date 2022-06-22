@@ -22,7 +22,8 @@ func main() {
 		//krypto.Wipe(groups)
 	}
 
-	k.NewTextMessage("Hello world", "VQ")
+	//k.NewTextMessage("Hello world", "VQ, KA", "HELLO")
+	k.NewTextMessage("Hello world")
 
 	//k.Save()
 

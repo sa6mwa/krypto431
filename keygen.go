@@ -34,7 +34,7 @@ func (r *Instance) NewKey(keepers ...string) *[]rune {
 	}
 
 	for i := range keepers {
-		keeper := []rune(strings.TrimSpace(keepers[i]))
+		keeper := []rune(strings.ToUpper(strings.TrimSpace(keepers[i])))
 		key.Keepers = append(key.Keepers, keeper)
 	}
 

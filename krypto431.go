@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"strings"
 	"sync"
 
 	"github.com/sa6mwa/krypto431/crand"
@@ -82,14 +83,13 @@ type Message struct {
 	Binary     []byte   `json:",omitempty"`
 	CipherText []rune   `json:",omitempty"`
 	Recipients [][]rune `json:",omitempty"`
-	Decrypted  bool
 	instance   *Instance
 }
 
 // Wipe wipes a rune slice.
 func Wipe(b *[]rune) error {
 	if b == nil {
-		return errors.New("Received a nil pointer")
+		return errors.New("received a nil pointer")
 	}
 	if useCrandWipe {
 		err := RandomWipe(b)
@@ -108,7 +108,7 @@ func Wipe(b *[]rune) error {
 // RandomWipe wipes a rune slice with random runes.
 func RandomWipe(b *[]rune) error {
 	if b == nil {
-		return errors.New("Received a nil pointer")
+		return errors.New("received a nil pointer")
 	}
 	written, err := crand.ReadRunes(*b)
 	if err != nil || written != len(*b) {
@@ -124,7 +124,7 @@ func RandomWipe(b *[]rune) error {
 // ZeroWipe wipes a rune slice with zeroes.
 func ZeroWipe(b *[]rune) error {
 	if b == nil {
-		return errors.New("Received a nil pointer")
+		return errors.New("received a nil pointer")
 	}
 	for i := range *b {
 		(*b)[i] = 0
@@ -152,7 +152,7 @@ func (k *Key) Wipe() error {
 // RandomWipe overwrites key with random runes.
 func (k *Key) RandomWipe() error {
 	if k == nil {
-		return errors.New("Received a nil pointer")
+		return errors.New("received a nil pointer")
 	}
 	runeSlices := []*[]rune{&k.Runes, &k.Id}
 	for i := range runeSlices {
@@ -175,7 +175,7 @@ func (k *Key) RandomWipe() error {
 // ZeroWipe zeroes a key.
 func (k *Key) ZeroWipe() error {
 	if k == nil {
-		return errors.New("Received a nil pointer")
+		return errors.New("received a nil pointer")
 	}
 	for i := 0; i < len(k.Runes); i++ {
 		k.Runes[i] = 0
@@ -193,10 +193,10 @@ func (k *Key) ZeroWipe() error {
 // done!
 func groups(input *[]rune, groupsize int) (*[]rune, error) {
 	if input == nil {
-		return nil, errors.New("Input must not be a nil pointer")
+		return nil, errors.New("input must not be a nil pointer")
 	}
 	if groupsize <= 0 {
-		return nil, errors.New("Groupsize must be above 0")
+		return nil, errors.New("groupsize must be above 0")
 	}
 	output := make([]rune, 0, int(math.Ceil(float64(len(*input))/float64(groupsize)))*(groupsize+1))
 	runeCount := 0
@@ -437,16 +437,49 @@ func (r *Instance) Save() {
 // second is a comma-separated list with recipients, third a key id to override
 // the key finder function and use a specific key (not marked "used"). First
 // argument is mandatory, rest are optional.
-func (r *Instance) NewTextMessage(msg ...string) error {
+func (r *Instance) NewTextMessage(msg ...string) (err error) {
+	// 1st arg = message as a utf8 string (mandatory)
+	// 2nd arg = recipients as a comma-separated list (optional)
+	// 3rd arg = key id, overrides the key finder function (optional)
 
-	
-
-
-	message := Message{
-
+	if len(msg) == 0 {
+		return errors.New("must at least provide the message text (first argument)")
 	}
 
-	return nil
+	message := Message{
+		PlainText: []rune(strings.TrimSpace(msg[0])),
+		instance:  r,
+	}
+
+	if len(message.PlainText) < 1 {
+		return errors.New("message is empty")
+	}
+
+	if len(msg) >= 2 {
+		recipients := strings.Split(msg[1], ",")
+		for i := range recipients {
+			message.Recipients = append(message.Recipients, []rune(strings.TrimSpace(strings.ToUpper(recipients[i]))))
+		}
+	}
+
+	if len(msg) >= 3 {
+		message.KeyId = []rune(strings.ToUpper(strings.TrimSpace(msg[2])))
+	}
+
+	/* EnrichWithKey() need to be changed:
+	no err when key already present, and marked not used
+	no err when ciphertext is already present, just return
+	if there are no Recipients, find key that also has no Keepers (empty Keepers) / or my CS by default?
+
+	*/
+
+	err = message.Encipher()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("%+v\n", message)
+	return err
 }
 
 // TODO: Implement! :)
