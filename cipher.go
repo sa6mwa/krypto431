@@ -321,7 +321,15 @@ func (t *Message) EnrichWithKey() (*[]rune, error) {
 		return nil, errors.New("PlainText is empty")
 	}
 	if len(t.KeyId) > 0 {
-		return nil, errors.New("Text appear to be enriched with a KeyId already, will not continue")
+		// already enriched with a KeyId, check if it's used, if so, return error otherwise OK
+		for i := range t.instance.Keys {
+			if t.instance.Keys[i].Id == t.KeyId && t.instance.Keys[i].Used == true {
+				return nil, fmt.Errorf("message already enriched with used KeyId %s", string(t.KeyId))
+			} else if t.instance.Keys[i].Id == t.KeyId && t.instance.Keys[i].Used == false {
+				return i.instance.Keys[i].Id, nil
+			}
+		}
+		return nil, errors.New("message enriched with non-existant key")
 	}
 	if len(t.CipherText) > 0 {
 		return nil, errors.New("Text appear to have CipherText already, will not enrich with key")
