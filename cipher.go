@@ -323,10 +323,10 @@ func (t *Message) EnrichWithKey() (*[]rune, error) {
 	if len(t.KeyId) > 0 {
 		// already enriched with a KeyId, check if it's used, if so, return error otherwise OK
 		for i := range t.instance.Keys {
-			if t.instance.Keys[i].Id == t.KeyId && t.instance.Keys[i].Used == true {
+			if string(t.instance.Keys[i].Id) == string(t.KeyId) && t.instance.Keys[i].Used == true {
 				return nil, fmt.Errorf("message already enriched with used KeyId %s", string(t.KeyId))
-			} else if t.instance.Keys[i].Id == t.KeyId && t.instance.Keys[i].Used == false {
-				return i.instance.Keys[i].Id, nil
+			} else if string(t.instance.Keys[i].Id) == string(t.KeyId) && t.instance.Keys[i].Used == false {
+				return &t.instance.Keys[i].Id, nil
 			}
 		}
 		return nil, errors.New("message enriched with non-existant key")
