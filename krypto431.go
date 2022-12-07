@@ -1,11 +1,15 @@
 package krypto431
 
 import (
-	"encoding/json"
+	"compress/gzip"
+	"encoding/gob"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"math"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -23,30 +27,34 @@ type Krypto431 interface {
 
 // defaults
 const (
-	defaultGroupSize       int  = 5
-	defaultKeyLength       int  = 280 // same as Twitter
-	defaultColumns         int  = 80
-	defaultMakePDF         bool = false
-	defaultMakeTextFiles   bool = false
-	useCrandWipe           bool = true
-	DefaultKeyCapacity     int  = 280
-	DefaultMessageCapacity int  = defaultKeyLength * 20 // 5600
+	defaultSaveFile        string = "~/.krypto431.gob"
+	defaultGroupSize       int    = 5
+	defaultKeyLength       int    = 280 // same as Twitter
+	defaultColumns         int    = 80
+	defaultMakePDF         bool   = false
+	defaultMakeTextFiles   bool   = false
+	useCrandWipe           bool   = true
+	DefaultKeyCapacity     int    = 280
+	DefaultMessageCapacity int    = defaultKeyLength * 20 // 5600
 )
 
 // Instance stores generated keys, plaintext, ciphertext, callsign(s) and
 // configuration items. It is mandatory to populate MyCallSigns with at least
 // one call sign (something identifying yourself in message handling). It will
-// be converted to upper case.
+// be converted to upper case. Mutex and persistance file (saveFile) are not
+// exported meaning values will not be persisted to disk.
 type Instance struct {
-	Mu            *sync.Mutex
-	GroupSize     int       `json:",omitempty"`
-	KeyLength     int       `json:",omitempty"`
-	Columns       int       `json:",omitempty"`
-	Keys          []Key     `json:",omitempty"`
-	Messages      []Message `json:",omitempty"`
-	MakePDF       bool      `json:",omitempty"`
-	MakeTextFiles bool      `json:",omitempty"`
-	MyCallSigns   *[][]rune `json:",omitempty"`
+	mx                       *sync.Mutex
+	saveFile                 string
+	createSaveFileIfNotExist bool
+	GroupSize                int       `json:",omitempty"`
+	KeyLength                int       `json:",omitempty"`
+	Columns                  int       `json:",omitempty"`
+	Keys                     []Key     `json:",omitempty"`
+	Messages                 []Message `json:",omitempty"`
+	MakePDF                  bool      `json:",omitempty"`
+	MakeTextFiles            bool      `json:",omitempty"`
+	MyCallSigns              *[][]rune `json:",omitempty"`
 }
 
 // Key struct holds a key. Keepers is a list of callsigns or other identifiers
@@ -55,12 +63,11 @@ type Instance struct {
 // default, all your callsigns (MyCallSigns) will be appended to the Keepers
 // slice.
 type Key struct {
-	Id        []rune   `json:",omitempty"`
-	Runes     []rune   `json:",omitempty"`
-	Keepers   [][]rune `json:",omitempty"`
-	Used      bool     `json:",omitempty"`
-	Decrypted bool
-	instance  *Instance
+	Id       []rune   `json:",omitempty"`
+	Runes    []rune   `json:",omitempty"`
+	Keepers  [][]rune `json:",omitempty"`
+	Used     bool     `json:",omitempty"`
+	instance *Instance
 }
 
 // Message holds plaintext and ciphertext. To encrypt, you need to populate the
@@ -308,19 +315,21 @@ func (t *Message) ZeroWipe() {
 // New creates a new Instance construct
 func New(opts ...Option) Instance {
 	i := Instance{
-		GroupSize:     defaultGroupSize,
-		KeyLength:     defaultKeyLength,
-		Columns:       defaultColumns,
-		MakePDF:       defaultMakePDF,
-		MakeTextFiles: defaultMakeTextFiles,
-		Keys:          make([]Key, 0, DefaultKeyCapacity),
-		Messages:      make([]Message, 0, DefaultMessageCapacity),
+		saveFile:                 defaultSaveFile,
+		createSaveFileIfNotExist: false,
+		GroupSize:                defaultGroupSize,
+		KeyLength:                defaultKeyLength,
+		Columns:                  defaultColumns,
+		MakePDF:                  defaultMakePDF,
+		MakeTextFiles:            defaultMakeTextFiles,
+		Keys:                     make([]Key, 0, DefaultKeyCapacity),
+		Messages:                 make([]Message, 0, DefaultMessageCapacity),
 	}
 	for _, opt := range opts {
 		opt(&i)
 	}
-	if i.Mu == nil {
-		i.Mu = &sync.Mutex{}
+	if i.mx == nil {
+		i.mx = &sync.Mutex{}
 	}
 	if i.MyCallSigns == nil {
 		// KA = Kilo Alpha = Kalle Anka = Donald Duck
@@ -330,7 +339,7 @@ func New(opts ...Option) Instance {
 	return i
 }
 
-// Option fn type for the New() construct.
+// Option fn type for the New() and Load() constructs.
 type Option func(r *Instance)
 
 func WithCallSign(cs *[]rune) Option {
@@ -345,7 +354,7 @@ func WithCallSigns(css *[][]rune) Option {
 }
 func WithMutex(mu *sync.Mutex) Option {
 	return func(r *Instance) {
-		r.Mu = mu
+		r.mx = mu
 	}
 }
 func WithGroupSize(n int) Option {
@@ -371,6 +380,18 @@ func WithMakePDF(b bool) Option {
 func WithMakeTextFiles(b bool) Option {
 	return func(r *Instance) {
 		r.MakeTextFiles = b
+	}
+}
+
+func WithSaveFile(savefile string) Option {
+	return func(r *Instance) {
+		r.saveFile = savefile
+	}
+}
+
+func WithCreateSaveFileIfNotExist() Option {
+	return func(r *Instance) {
+		r.createSaveFileIfNotExist = true
 	}
 }
 
@@ -425,12 +446,85 @@ func (r *Instance) Wipe() {
 	r.Messages = nil
 }
 
-func (r *Instance) Save() {
-	j, err := json.Marshal(r)
-	if err != nil {
-		panic(err)
+func (r *Instance) Save() error {
+	if len(r.saveFile) == 0 {
+		return fmt.Errorf("can not save: missing file name for persisting keys, messages and settings")
 	}
-	fmt.Println(string(j))
+	// If save file starts with a tilde, resolve it to the user's home directory.
+	if strings.HasPrefix(r.saveFile, "~/") {
+		dirname, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		r.saveFile = filepath.Join(dirname, r.saveFile[2:])
+	}
+	// Create save file if it does not exist or truncate it if it does exist.
+	f, err := os.OpenFile(r.saveFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	// Krypto431 save files are gzipped GOB files.
+	fgz := gzip.NewWriter(f)
+	defer fgz.Close()
+	gobEncoder := gob.NewEncoder(fgz)
+	err = gobEncoder.Encode(r)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *Instance) Load() error {
+	if len(r.saveFile) == 0 {
+		return fmt.Errorf("missing file name for persisting keys, messages and settings")
+	}
+	// If save file starts with a tilde, resolve it to the user's home directory.
+	if strings.HasPrefix(r.saveFile, "~/") {
+		dirname, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		r.saveFile = filepath.Join(dirname, r.saveFile[2:])
+	}
+
+	var f *os.File
+	_, err := os.Stat(r.saveFile)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) && r.createSaveFileIfNotExist {
+			err = r.Save()
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	} else {
+		// Save file does exist, load it...
+		f, err = os.Open(r.saveFile)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		fgz, err := gzip.NewReader(f)
+		if err != nil {
+			return err
+		}
+		defer fgz.Close()
+		gobDecoder := gob.NewDecoder(fgz)
+		err = gobDecoder.Decode(r)
+		if err != nil {
+			return err
+		}
+		// Fix all unexported instance fields in keys and messages
+		for i := range r.Keys {
+			r.Keys[i].instance = r
+		}
+		for i := range r.Messages {
+			r.Messages[i].instance = r
+		}
+	}
+	return nil
 }
 
 // NewTextMessage() is a variadic function where first argument is the message,

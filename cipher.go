@@ -14,7 +14,7 @@ var (
 	// Q in 2nd = Q
 	// S in 2nd = Z
 	// W in 2nd = switch to binary mode, 1 byte is 2 runes, A to P is one nibble (4 bits, 1-16)
-	// X in 2nd = switch case (toggle case like capslock)
+	// X in 2nd = switch case (toggle case like CAPS LOCK)
 	// Y in 2nd = change key (followed by 5 character key after which the table is reset)
 
 	//CharacterTablePrimary   []rune   = []rune(`ABCDEFGHIJKLMNOP RSTUVWXY¤`)

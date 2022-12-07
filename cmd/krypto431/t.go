@@ -8,11 +8,12 @@ import (
 
 func main() {
 	k := krypto431.New()
+	k.Load()
 
-	for i := 0; i < 3; i++ {
-		fmt.Printf("Generated key with id: %s\n", string(*k.NewKey()))
-	}
-
+	/* 	for i := 0; i < 3; i++ {
+	   		fmt.Printf("Generated key with id: %s\n", string(*k.NewKey()))
+	   	}
+	*/
 	for i := range k.Keys {
 		groups, err := k.Keys[i].Groups()
 		if err != nil {
