@@ -220,15 +220,14 @@ func groups(input *[]rune, groupsize int) (*[]rune, error) {
 	return &output, nil
 }
 
-// Groups appends runes into the target slice into groups of GroupSize runes
-// separated by space. Don't forget to Wipe(target) this slice when you are
-// done!
+// Groups for keys return a rune slice where each number of GroupSize runes are
+// separated by a space. Don't forget to Wipe() this slice when you are done!
 func (k *Key) Groups() (*[]rune, error) {
 	return groups(&k.Runes, k.instance.GroupSize)
 }
 
-// Groups assigned method returns a []rune where each group is separated by
-// space.
+// Groups for messages return a rune slice where each group (GroupSize) is
+// separated by space. Don't forget to Wipe() this slice when you are done!
 func (t *Message) Groups() (*[]rune, error) {
 	// There is no need to group the Message (non-encoded) field.
 	return groups(&t.CipherText, t.instance.GroupSize)
@@ -558,6 +557,9 @@ func (r *Instance) NewTextMessage(msg ...string) (err error) {
 
 	if len(msg) >= 3 {
 		message.KeyId = []rune(strings.ToUpper(strings.TrimSpace(msg[2])))
+		if len(message.KeyId) != r.GroupSize {
+			return fmt.Errorf("keyid \"%s\" must be %d characters long (the configured group size)", string(message.KeyId), r.GroupSize)
+		}
 	}
 
 	/* EnrichWithKey() need to be changed:

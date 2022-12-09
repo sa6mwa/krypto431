@@ -34,8 +34,7 @@ func (r *Instance) NewKey(keepers ...string) *[]rune {
 	}
 
 	for i := range keepers {
-		keeper := []rune(strings.ToUpper(strings.TrimSpace(keepers[i])))
-		key.Keepers = append(key.Keepers, keeper)
+		key.Keepers = append(key.Keepers, []rune(strings.ToUpper(strings.TrimSpace(keepers[i]))))
 	}
 
 	for { // if we already have 26*26*26*26*26 keys, this is an infinite loop :)
@@ -57,9 +56,9 @@ func (r *Instance) NewKey(keepers ...string) *[]rune {
 }
 
 // GenerateKeys creates n amount of keys
-func (r *Instance) GenerateKeys(n int) error {
+func (r *Instance) GenerateKeys(n int, keepers ...string) error {
 	for i := 0; i < n; i++ {
-		_ = r.NewKey()
+		_ = r.NewKey(keepers...)
 	}
 	return nil
 }

@@ -1,7 +1,7 @@
 // This package is used to encode a letter according to the DIANA Cryptosystem
 // developed by United States NSA. DIANA is usually called a trigraph cipher as
 // it requires 3 letters for encryption/decryption similar to most
-// Viginere-based ciphers. The beauty of the DIANA cipher is the reverse
+// Vigenere-based ciphers. The beauty of the DIANA cipher is the reverse
 // representation of the alphabeth - reverse of A is Z, reverse of B is Y, C is
 // X, etc. This makes it possible to use the exact same procedure for both
 // encryption and decryption. It does also not matter if you use the
@@ -86,10 +86,10 @@ func TrigraphRune(writeTo *rune, x *rune, y *rune) error {
 	return nil
 }
 
-// ZeroKeyByte returns a "zero" encryption letter (rune) key in order to
+// ZeroKeyByte returns a "zero" encryption letter (byte) key in order to
 // trigraph-encode an input letter to the same output letter (which makes the
 // plaintext same as the ciphertext, effectively a zero key in a standard
-// Vignere cipher).
+// Vigenere cipher).
 func ZeroKeyByte(writeTo *byte, character *byte) error {
 	return TrigraphByte(writeTo, character, character)
 }
@@ -97,7 +97,7 @@ func ZeroKeyByte(writeTo *byte, character *byte) error {
 // ZeroKeyRune returns a "zero" encryption letter (rune) key in order to
 // trigraph-encode an input letter to the same output letter (which makes the
 // plaintext same as the ciphertext, effectively a zero key in a standard
-// Vignere cipher).
+// Vigenere cipher).
 func ZeroKeyRune(writeTo *rune, character *rune) error {
 	return TrigraphRune(writeTo, character, character)
 }
@@ -107,28 +107,28 @@ func ZeroKeyRune(writeTo *rune, character *rune) error {
 // keyIndex pointer when done making it possible to call this function
 // repeatedly per input character. You will have to check that the index is not
 // out of range, function will fail if index is greater than the length of the
-// byte slice.  You should also ensure the the byte slice (pointing at by
+// byte slice. You should also ensure the the byte slice (pointing at by
 // writeTo) has the desired capacity in order to prevent the append function to
 // make a new slice and copy everything from the old slice, thus leaving traces
 // of encrypted text in memory that you are unable to wipe by yourself.
 func AppendTrigraphByteByKey(writeTo *[]byte, character *byte, key *[]byte, keyIndex *int) error {
 	if writeTo == nil {
-		return errors.New("Output pointer can not be nil")
+		return errors.New("output pointer can not be nil")
 	}
 	if key == nil {
-		return errors.New("Key can not be nil")
+		return errors.New("key can not be nil")
 	}
 	if keyIndex == nil {
-		return errors.New("Key index can not be nil")
+		return errors.New("key index can not be nil")
 	}
 	if character == nil {
-		return errors.New("Character pointer is nil")
+		return errors.New("character pointer is nil")
 	}
 	if *keyIndex < 0 {
-		return errors.New("Key index can not be negative")
+		return errors.New("key index can not be negative")
 	}
 	if *keyIndex > len(*writeTo) {
-		return errors.New("Key index is out-of-bounds")
+		return errors.New("key index is out-of-bounds")
 	}
 	var b byte
 	err := TrigraphByte(&b, character, &(*key)[*keyIndex])

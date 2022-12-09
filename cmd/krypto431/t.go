@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"strings"
 
 	"github.com/sa6mwa/krypto431"
 )
@@ -19,12 +21,15 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		fmt.Printf("%d:\n'%s'\n\n", len(k.Keys[i].Runes), string(*groups))
+		fmt.Printf("%d (keepers: %s):\n'%s'\n\n", len(k.Keys[i].Runes), strings.Join(k.Keys[i].Keepers.Strings(), ","), string(*groups))
 		//krypto.Wipe(groups)
 	}
 
 	//k.NewTextMessage("Hello world", "VQ, KA", "HELLO")
-	k.NewTextMessage("Hello world")
+	err := k.NewTextMessage("Hello world")
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	//k.Save()
 

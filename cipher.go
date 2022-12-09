@@ -312,33 +312,67 @@ func (t *Message) Decode() error {
 }
 */
 
-// EnrichWithKey finds the first appropriate key for this Message structure where
-// each of the Messages Recipients are Keepers of the same key. It returns a
-// pointer to the key bytes/runes that will be used by diana.Trigraph later. It
-// also returns error in case no key was found or other error occurred.
-func (t *Message) EnrichWithKey() (*[]rune, error) {
+// EnrichWithKey finds the first appropriate key for this Message structure
+// where each of the Messages Recipients are Keepers of the same key. If
+// CipherText and KeyId already appear to be present, function will just return.
+// If CipherText appear to be present, but message KeyId is empty it will return
+// an error. If there is no CipherText or KeyId, the function will try to find
+// one where all recipients are keepers of this key. The message KeyId will be
+// used by diana.Trigraph during encryption/decryption.
+func (t *Message) EnrichWithKey() error {
 	if len(t.PlainText) == 0 {
-		return nil, errors.New("PlainText is empty")
+		return errors.New("message plain text is empty")
 	}
 	if len(t.KeyId) > 0 {
-		// already enriched with a KeyId, check if it's used, if so, return error otherwise OK
+		// already enriched with a KeyId, check if it's of correct length or used, if so, return error otherwise OK
+		if len(t.KeyId) != t.instance.GroupSize {
+			return fmt.Errorf("message key id is not %d letters long (configured group size)", t.instance.GroupSize)
+		}
 		for i := range t.instance.Keys {
-			if string(t.instance.Keys[i].Id) == string(t.KeyId) && t.instance.Keys[i].Used == true {
-				return nil, fmt.Errorf("message already enriched with used KeyId %s", string(t.KeyId))
-			} else if string(t.instance.Keys[i].Id) == string(t.KeyId) && t.instance.Keys[i].Used == false {
-				return &t.instance.Keys[i].Id, nil
+			if string(t.instance.Keys[i].Id) == string(t.KeyId) && t.instance.Keys[i].Used {
+				return fmt.Errorf("message already enriched with used KeyId %s", string(t.KeyId))
+			} else if string(t.instance.Keys[i].Id) == string(t.KeyId) && !t.instance.Keys[i].Used {
+				return nil
 			}
 		}
-		return nil, errors.New("message enriched with non-existant key")
+		return errors.New("message enriched with non-existing key, unable to encipher plain text")
 	}
 	if len(t.CipherText) > 0 {
-		return nil, errors.New("Text appear to have CipherText already, will not enrich with key")
+		// message appear to have cipher text already, do not enrich with key and do
+		// not validate if the key exists (decipher will fail if it doesn't exist
+		// anyway).
+		if len(t.KeyId) != t.instance.GroupSize {
+			return errors.New("message already contain cipher text, but key id is empty or not correct length")
+		}
+		return nil
 	}
-	if len(t.Recipients) == 0 {
-		return nil, errors.New("Text has no Recipients")
-	}
-	// Find the first key where all Recipients are Keepers
+
 	var keyPtr *[]rune
+
+	// If message has no recipients, find an anonymous key.
+	if len(t.Recipients) == 0 {
+		// find an anonymous key, i.e a key with no keepers.
+		for i := range t.instance.Keys {
+			if t.instance.Keys[i].Used {
+				continue
+			}
+			if len(t.instance.Keys[i].Keepers) == 0 {
+				// Found an anonymous key
+				// Mark the key as Used
+				t.instance.Keys[i].Used = true
+				t.KeyId = t.instance.Keys[i].Id
+				keyPtr = &t.instance.Keys[i].Runes
+				break
+			}
+		}
+		if keyPtr == nil {
+			return errors.New("did not find an anonymous key (a key without keepers)")
+		}
+		return nil
+	}
+
+	// If message has recipients, find the first key where all Recipients are
+	// Keepers (in order so that all recipients can decipher the message).
 	for i := range t.instance.Keys {
 		if t.instance.Keys[i].Used {
 			continue
@@ -347,7 +381,6 @@ func (t *Message) EnrichWithKey() (*[]rune, error) {
 			// Found a key
 			// Mark the key as Used
 			t.instance.Keys[i].Used = true
-			// if !Decrypt, decrypt the key
 			// copy Key.Id to Message.KeyId
 			t.KeyId = t.instance.Keys[i].Id
 			keyPtr = &t.instance.Keys[i].Runes
@@ -355,26 +388,23 @@ func (t *Message) EnrichWithKey() (*[]rune, error) {
 		}
 	}
 	if keyPtr == nil {
-		return nil, errors.New("Did not find a key where all Recipients are Keepers of the same key")
+		return errors.New("did not find a key where all recipients are keepers of the same key")
 	}
-	if len(t.KeyId) < t.instance.GroupSize {
-		return nil, errors.New("KeyId is empty or less than GroupSize")
+	if len(t.KeyId) != t.instance.GroupSize {
+		return errors.New("key id is not the length of configured group size")
 	}
-	return keyPtr, nil
+	return nil
 }
 
 // Encipher enciphers the PlainText field into the CipherText field of a Message
 // structure and wipes the PlainText field. Verbs like encrypt and decrypt are
-// only used for AES-256 encryption/decryption of fields in the json savefile
-// (and to encrypt the json output file itself), while words encipher and
-// decipher are used for message ciphering in Krypto431.
+// only used for AES encryption/decryption of the save file, while words
+// encipher and decipher are used for message ciphering in Krypto431.
 func (t *Message) Encipher() error {
-	//keyPtr, err := t.EnrichWithKey()
-	_, err := t.EnrichWithKey()
+	err := t.EnrichWithKey()
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to enrich message with a key: %w", err)
 	}
-	// keyPtr is assumed not to be nil, at least that is the design of EnrichWithKey
 
 	Wipe(&t.CipherText)
 	state := newState()
