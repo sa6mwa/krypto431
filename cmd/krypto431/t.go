@@ -21,7 +21,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		fmt.Printf("%d (keepers: %s):\n'%s'\n\n", len(k.Keys[i].Runes), strings.Join(k.Keys[i].Keepers.Strings(), ","), string(*groups))
+		fmt.Printf("%d (id: %s, used: %t, keepers: %s):\n'%s'\n\n", len(k.Keys[i].Runes), string(k.Keys[i].Id), k.Keys[i].Used, strings.Join(krypto431.RunesToStrings(&k.Keys[i].Keepers), ","), string(*groups))
 		//krypto.Wipe(groups)
 	}
 

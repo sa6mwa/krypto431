@@ -445,6 +445,7 @@ func (r *Instance) Wipe() {
 	r.Messages = nil
 }
 
+// TODO: Try https://github.com/nknorg/encrypted-stream for encrypting file before gzip...
 func (r *Instance) Save() error {
 	if len(r.saveFile) == 0 {
 		return fmt.Errorf("can not save: missing file name for persisting keys, messages and settings")
@@ -585,5 +586,11 @@ func (r *Instance) NewTextMessage(msg ...string) (err error) {
 //func (r *Instance) Encode(plaintext string) {}
 //func (r *Instance) Decode(plaintext string) {}
 
-func (r *Instance) EncryptFile(path string) {}
-func (r *Instance) DecryptFile(path string) {}
+// Generic function to convert an array of rune slices (runes) into a string
+// slice.
+func RunesToStrings(runes *[][]rune) (stringSlice []string) {
+	for i := range *runes {
+		stringSlice = append(stringSlice, string((*runes)[i]))
+	}
+	return
+}

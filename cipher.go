@@ -31,8 +31,11 @@ const (
 	//tertiaryTable  int = 2
 
 	// specialOpChar was dummyChar, means character has special meaning, see below...
-	// specialOpChar will be replaced by zeroes during initialization (0x00)
 	specialOpChar rune = '¤'
+
+	// Which character to insert into the encoded text to indicate a key change
+	// (DIANA is only A to Z, any character outside of these are fine).
+	changeKeyPlaceholderChar rune = '*'
 
 	// caseToggleChar adds strings.ToLower() on every character depending on previous
 	// state (stateShift).
@@ -56,6 +59,9 @@ const (
 
 	// nextTableChar switches to the next table (if 3 table, then mod(3))
 	nextTableChar rune = 'Z'
+
+	// How many instructional runes/characters are required to change key?
+	ControlCharactersNeededToChangeKey int = 2
 )
 
 func isUpper(c *rune) bool {
@@ -312,6 +318,38 @@ func (t *Message) Decode() error {
 }
 */
 
+// FindKey is a krypto431 instance assigned function that returns the first
+// un-used key of the correct group size configured where all recipients are
+// keepers of that key. If the recipient slice is empty, it will find the first
+// un-used anonymous key (a key without any keepers). Function returns a pointer
+// to the key. FindKey will not mark the key as used.
+func (r *Instance) FindKey(recipients ...[]rune) *Key {
+	numberOfRecipients := len(recipients)
+	for i := range r.Keys {
+		if r.Keys[i].Used {
+			continue
+		}
+		if len(r.Keys[i].Id) != r.GroupSize {
+			continue
+		}
+		if numberOfRecipients == 0 {
+			// Find an anonymous key
+			if len(r.Keys[i].Keepers) == 0 {
+				// Found an anonymous key
+				return &r.Keys[i]
+			}
+		} else {
+			// Find a key where all recipients are keepers of that key.
+			if AllNeedlesInHaystack(&recipients, &r.Keys[i].Keepers) {
+				// Found a key where all recipients are keepers.
+				return &r.Keys[i]
+			}
+		}
+	}
+	// If we reached here, we found no key.
+	return nil
+}
+
 // EnrichWithKey finds the first appropriate key for this Message structure
 // where each of the Messages Recipients are Keepers of the same key. If
 // CipherText and KeyId already appear to be present, function will just return.
@@ -347,52 +385,19 @@ func (t *Message) EnrichWithKey() error {
 		return nil
 	}
 
-	var keyPtr *[]rune
-
-	// If message has no recipients, find an anonymous key.
-	if len(t.Recipients) == 0 {
-		// find an anonymous key, i.e a key with no keepers.
-		for i := range t.instance.Keys {
-			if t.instance.Keys[i].Used {
-				continue
-			}
-			if len(t.instance.Keys[i].Keepers) == 0 {
-				// Found an anonymous key
-				// Mark the key as Used
-				t.instance.Keys[i].Used = true
-				t.KeyId = t.instance.Keys[i].Id
-				keyPtr = &t.instance.Keys[i].Runes
-				break
-			}
-		}
-		if keyPtr == nil {
+	var designatedKey *Key
+	designatedKey = t.instance.FindKey(t.Recipients...)
+	if designatedKey == nil {
+		if len(t.Recipients) == 0 {
 			return errors.New("did not find an anonymous key (a key without keepers)")
-		}
-		return nil
-	}
-
-	// If message has recipients, find the first key where all Recipients are
-	// Keepers (in order so that all recipients can decipher the message).
-	for i := range t.instance.Keys {
-		if t.instance.Keys[i].Used {
-			continue
-		}
-		if AllNeedlesInHaystack(&t.Recipients, &t.instance.Keys[i].Keepers) {
-			// Found a key
-			// Mark the key as Used
-			t.instance.Keys[i].Used = true
-			// copy Key.Id to Message.KeyId
-			t.KeyId = t.instance.Keys[i].Id
-			keyPtr = &t.instance.Keys[i].Runes
-			break
+		} else {
+			return errors.New("did not find a key where all recipients are keepers of the same key")
 		}
 	}
-	if keyPtr == nil {
-		return errors.New("did not find a key where all recipients are keepers of the same key")
-	}
-	if len(t.KeyId) != t.instance.GroupSize {
-		return errors.New("key id is not the length of configured group size")
-	}
+	// Mark key as used.
+	designatedKey.Used = true
+	// Enrich message instance with key id.
+	t.KeyId = designatedKey.Id
 	return nil
 }
 
@@ -407,16 +412,34 @@ func (t *Message) Encipher() error {
 	}
 
 	Wipe(&t.CipherText)
+
+	// Encode plaintext
+	//var additionalKeysUsed []*Key
 	state := newState()
+	// An encoded message contains one or more chunks. Each chunk is enciphered
+	// with a key. Each chunk must divide without remainders with GroupSize.
+	chunk := make([]rune, 0, len(t.PlainText)*2)
+	var chunks [][]rune
+	defer func(c *[][]rune) {
+		Wipe(&chunk)
+		for i := range *c {
+			Wipe(&(*c)[i])
+		}
+	}(&chunks)
 
-	encodedText := make([]rune, 0, len(t.PlainText)*2)
-	defer Wipe(&encodedText)
-
-	x := 0
-	//keysNeeded := 1
 	for i := range t.PlainText {
-		// if x >= KeyLength-GroupSize-2, add star for key-change and reset x to 0
-		err := state.encodeCharacter(&t.PlainText[i], &encodedText)
+		// continue here
+
+		// encode and encipher in the same function?
+
+		if len(encodedText) >= t.instance.KeyLength-t.instance.GroupSize-ControlCharactersNeededToChangeKey {
+			// Add change key placeholder character (a star).
+			encodedText = append(encodedText, changeKeyPlaceholderChar)
+			x = 0
+			continue
+		}
+
+		err := state.encodeCharacter(&t.PlainText[i], &chunk)
 		if err != nil {
 			return err
 		}
