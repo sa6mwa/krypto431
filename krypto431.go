@@ -16,6 +16,10 @@ import (
 	"github.com/sa6mwa/krypto431/crand"
 )
 
+var (
+	ErrNilPointer = errors.New("received a nil pointer")
+)
+
 // Krypto431 is the interface. Each struct must have these assigned methods.
 type Krypto431 interface {
 	Wipe()
@@ -27,15 +31,18 @@ type Krypto431 interface {
 
 // defaults
 const (
-	defaultSaveFile        string = "~/.krypto431.gob"
-	defaultGroupSize       int    = 5
-	defaultKeyLength       int    = 280 // same as Twitter
-	defaultColumns         int    = 80
-	defaultMakePDF         bool   = false
-	defaultMakeTextFiles   bool   = false
-	useCrandWipe           bool   = true
-	DefaultKeyCapacity     int    = 280
-	DefaultMessageCapacity int    = defaultKeyLength * 20 // 5600
+	defaultSaveFile            string = "~/.krypto431.gob"
+	defaultGroupSize           int    = 5
+	defaultKeyLength           int    = 280 // same as Twitter
+	defaultColumns             int    = 80
+	defaultMakePDF             bool   = false
+	defaultMakeTextFiles       bool   = false
+	useCrandWipe               bool   = true
+	DefaultKeyCapacity         int    = 1000 // 1000 keys
+	DefaultChunkCapacity       int    = 20   // 20 chunks
+	DefaultEncodedTextCapacity int    = defaultKeyLength * 2
+	DefaultMessageCapacity     int    = 1000                  // 1000 messages
+	DefaultPlainTextCapacity   int    = defaultKeyLength * 20 // 5600
 )
 
 // Instance stores generated keys, plaintext, ciphertext, callsign(s) and
@@ -84,19 +91,29 @@ type Key struct {
 // your instace's Keys slice it will be fetched from the database or fail. The
 // KeyId should be the first group in your received message.
 type Message struct {
-	GroupCount int      `json:",omitempty"`
-	KeyId      []rune   `json:",omitempty"`
-	PlainText  []rune   `json:",omitempty"`
-	Binary     []byte   `json:",omitempty"`
-	CipherText []rune   `json:",omitempty"`
-	Recipients [][]rune `json:",omitempty"`
-	instance   *Instance
+	GroupCount    int      `json:",omitempty"`
+	KeyId         []rune   `json:",omitempty"`
+	PlainText     []rune   `json:",omitempty"`
+	Binary        []byte   `json:",omitempty"`
+	EncodedChunks []Chunk  `json:",omitempty"`
+	CipherText    []rune   `json:",omitempty"`
+	Recipients    [][]rune `json:",omitempty"`
+	instance      *Instance
+}
+
+// A chunk is either the complete PlainText encoded or - if the message is too
+// long for the key - part of the PlainText where all but the last chunk ends in
+// a key change. Each chunk is to be enciphered with a key allowing to chain
+// multiple keys for longer messages.
+type Chunk struct {
+	EncodedText []rune `json:",omitempty"`
+	KeyId       []rune `json:",omitempty"`
 }
 
 // Wipe wipes a rune slice.
 func Wipe(b *[]rune) error {
 	if b == nil {
-		return errors.New("received a nil pointer")
+		return ErrNilPointer
 	}
 	if useCrandWipe {
 		err := RandomWipe(b)
@@ -115,7 +132,7 @@ func Wipe(b *[]rune) error {
 // RandomWipe wipes a rune slice with random runes.
 func RandomWipe(b *[]rune) error {
 	if b == nil {
-		return errors.New("received a nil pointer")
+		return ErrNilPointer
 	}
 	written, err := crand.ReadRunes(*b)
 	if err != nil || written != len(*b) {
@@ -131,7 +148,7 @@ func RandomWipe(b *[]rune) error {
 // ZeroWipe wipes a rune slice with zeroes.
 func ZeroWipe(b *[]rune) error {
 	if b == nil {
-		return errors.New("received a nil pointer")
+		return ErrNilPointer
 	}
 	for i := range *b {
 		(*b)[i] = 0
@@ -158,9 +175,6 @@ func (k *Key) Wipe() error {
 
 // RandomWipe overwrites key with random runes.
 func (k *Key) RandomWipe() error {
-	if k == nil {
-		return errors.New("received a nil pointer")
-	}
 	runeSlices := []*[]rune{&k.Runes, &k.Id}
 	for i := range runeSlices {
 		written, err := crand.ReadRunes(*runeSlices[i])
@@ -170,8 +184,8 @@ func (k *Key) RandomWipe() error {
 			}
 			log.Printf("ERROR, wrote %d runes, but expected to write %d", written, len(*runeSlices[i]))
 			// zero-wipe rune slice instead...
-			for i := 0; i < len(*runeSlices[i]); i++ {
-				*runeSlices[i] = []rune{0}
+			for y := 0; y < len(*runeSlices[i]); y++ {
+				(*runeSlices[i])[y] = 0
 			}
 		}
 		*runeSlices[i] = nil
@@ -181,9 +195,6 @@ func (k *Key) RandomWipe() error {
 
 // ZeroWipe zeroes a key.
 func (k *Key) ZeroWipe() error {
-	if k == nil {
-		return errors.New("received a nil pointer")
-	}
 	for i := 0; i < len(k.Runes); i++ {
 		k.Runes[i] = 0
 	}
@@ -200,7 +211,7 @@ func (k *Key) ZeroWipe() error {
 // done!
 func groups(input *[]rune, groupsize int) (*[]rune, error) {
 	if input == nil {
-		return nil, errors.New("input must not be a nil pointer")
+		return nil, ErrNilPointer
 	}
 	if groupsize <= 0 {
 		return nil, errors.New("groupsize must be above 0")
@@ -287,6 +298,10 @@ func (t *Message) RandomWipe() {
 		}
 	}
 	t.KeyId = nil
+	// wipe Chunks
+	for x := range t.EncodedChunks {
+		t.EncodedChunks[x].RandomWipe()
+	}
 }
 
 // ZeroWipe assigned method for PlainText writes zeroes to Text and EncodedText
@@ -309,6 +324,59 @@ func (t *Message) ZeroWipe() {
 		t.KeyId[i] = 0
 	}
 	t.KeyId = nil
+	// wipe Chunks
+	for x := range t.EncodedChunks {
+		t.EncodedChunks[x].ZeroWipe()
+	}
+}
+
+// Wipe overwrites a chunk with either random runes or zeroes.
+func (c *Chunk) Wipe() error {
+	if useCrandWipe {
+		err := c.RandomWipe()
+		if err != nil {
+			return err
+		}
+	} else {
+		err := c.ZeroWipe()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Chunk RandomWipe overwrites chunk with random runes.
+func (c *Chunk) RandomWipe() error {
+	runeSlices := []*[]rune{&c.EncodedText, &c.KeyId}
+	for i := range runeSlices {
+		written, err := crand.ReadRunes(*runeSlices[i])
+		if err != nil || written != len(*runeSlices[i]) {
+			if err != nil {
+				log.Println(err.Error())
+			}
+			log.Printf("ERROR, wrote %d runes, but expected to write %d", written, len(*runeSlices[i]))
+			// zero-wipe rune slice instead...
+			for y := 0; y < len(*runeSlices[i]); y++ {
+				(*runeSlices[i])[y] = 0
+			}
+		}
+		*runeSlices[i] = nil
+	}
+	return nil
+}
+
+// Chunk ZeroWipe zeroes a chunk
+func (c *Chunk) ZeroWipe() error {
+	for i := 0; i < len(c.EncodedText); i++ {
+		c.EncodedText[i] = 0
+	}
+	c.EncodedText = nil
+	for i := 0; i < len(c.KeyId); i++ {
+		c.KeyId[i] = 0
+	}
+	c.KeyId = nil
+	return nil
 }
 
 // New creates a new Instance construct

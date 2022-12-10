@@ -33,10 +33,6 @@ const (
 	// specialOpChar was dummyChar, means character has special meaning, see below...
 	specialOpChar rune = '¤'
 
-	// Which character to insert into the encoded text to indicate a key change
-	// (DIANA is only A to Z, any character outside of these are fine).
-	changeKeyPlaceholderChar rune = '*'
-
 	// caseToggleChar adds strings.ToLower() on every character depending on previous
 	// state (stateShift).
 	caseToggleChar rune = 'X'
@@ -111,6 +107,7 @@ type codecState struct {
 	keyIndex       int
 	table          int
 	numberOfTables int
+	charCounter    int
 	shift          bool
 	binary         bool
 	lowerNibble    bool
@@ -121,6 +118,7 @@ func newState() *codecState {
 		keyIndex:       0,
 		table:          0,
 		numberOfTables: len(CharacterTables),
+		charCounter:    0,
 		shift:          false,
 		binary:         false,
 		lowerNibble:    false,
@@ -153,10 +151,21 @@ func (state *codecState) reset(p *Message) error {
 }
 */
 
+func (state *codecState) reset() {
+	state.keyIndex = 0
+	state.table = 0
+	state.numberOfTables = len(CharacterTables)
+	state.charCounter = 0
+	state.shift = false
+	state.binary = false
+	state.lowerNibble = false
+}
+
 func (state *codecState) nextTable(output *[]rune) {
 	state.table = (state.table + 1) % state.numberOfTables
 	if output != nil {
 		*output = append(*output, nextTableChar)
+		state.charCounter++
 	}
 }
 
@@ -167,8 +176,7 @@ func (state *codecState) toggleCase(output *[]rune) error {
 			return err
 		}
 		*output = append(*output, caseToggleChar)
-		//t.EncodedText = append(t.EncodedText, caseToggleChar)
-		//appendRune(&t.EncodedText, *caseToggleChar)
+		state.charCounter++
 	}
 	state.shift = !state.shift
 	return nil
@@ -181,8 +189,7 @@ func (state *codecState) toggleBinary(output *[]rune) error {
 			return err
 		}
 		*output = append(*output, binaryToggleChar)
-		//t.EncodedText = append(t.EncodedText, binaryToggleChar)
-		//appendRune(&p.EncodedText, *binaryToggleChar)
+		state.charCounter++
 	}
 	state.binary = !state.binary
 	return nil
@@ -248,6 +255,7 @@ func (state *codecState) encodeCharacter(input *rune, output *[]rune) error {
 					}
 					char := rune(i) + rune('A')
 					*output = append(*output, char)
+					state.charCounter++
 					char = 0
 					break
 				}
@@ -413,38 +421,55 @@ func (t *Message) Encipher() error {
 
 	Wipe(&t.CipherText)
 
+	// TODO: The encode phase should really go into a new Encode() function.
+
 	// Encode plaintext
-	//var additionalKeysUsed []*Key
 	state := newState()
+
 	// An encoded message contains one or more chunks. Each chunk is enciphered
-	// with a key. Each chunk must divide without remainders with GroupSize.
-	chunk := make([]rune, 0, len(t.PlainText)*2)
-	var chunks [][]rune
-	defer func(c *[][]rune) {
-		Wipe(&chunk)
-		for i := range *c {
-			Wipe(&(*c)[i])
-		}
-	}(&chunks)
+	// with a key. The last chunk need to fill out with table changers (Z) so that
+	// the sum of the length of all chunks are divided by GroupSize without a
+	// remainder (mod % GroupSize).
+	t.EncodedChunks = make([]Chunk, 0, DefaultChunkCapacity)
+
+	chunk := Chunk{
+		EncodedText: make([]rune, 0, DefaultEncodedTextCapacity),
+		KeyId:       make([]rune, 0, t.instance.GroupSize),
+	}
+	// First chunk obviously uses the message key id...
+	chunk.KeyId = t.KeyId
+
+	// If something fails, we need to release all keys we have used.
+	releaseKeys := false
+	defer func(do *bool) {
+		// if *do {
+		// mark all keys as unused in chunk and t.EncodedChunks
+		// wipe all chunks and chunk
+		// }
+	}(&releaseKeys)
 
 	for i := range t.PlainText {
 		// continue here
-
-		// encode and encipher in the same function?
-
-		if len(encodedText) >= t.instance.KeyLength-t.instance.GroupSize-ControlCharactersNeededToChangeKey {
-			// Add change key placeholder character (a star).
-			encodedText = append(encodedText, changeKeyPlaceholderChar)
-			x = 0
-			continue
+		if state.charCounter >= t.instance.KeyLength-t.instance.GroupSize-ControlCharactersNeededToChangeKey {
+			// find a key
+			// mark key as used
+			// add key changer character and keyid to chunk.EncodedText (state.changeKey or something)
+			// append chunk to t.EncodedChunks
+			// wipe temp chunk
+			// set found new key as chunk.KeyId
+			// Reset state
+			state.reset()
 		}
 
 		err := state.encodeCharacter(&t.PlainText[i], &chunk)
 		if err != nil {
+			releaseKeys = true
 			return err
 		}
-		x++
 	}
+
+	// count length of all chunks and make sure the last chunk compensates for modulo GroupSize
+	// if the last chunk
 
 	// encipher() encodedText with key
 
