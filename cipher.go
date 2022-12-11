@@ -3,6 +3,7 @@ package krypto431
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 var (
@@ -326,11 +327,10 @@ func (t *Message) Decode() error {
 }
 */
 
-// FindKey is a krypto431 instance assigned function that returns the first
-// un-used key of the correct group size configured where all recipients are
-// keepers of that key. If the recipient slice is empty, it will find the first
-// un-used anonymous key (a key without any keepers). Function returns a pointer
-// to the key. FindKey will not mark the key as used.
+// FindKey returns the first un-used key of the configured group size where all
+// recipients are keepers of that key. If the recipient slice is empty, it will
+// find the first un-used anonymous key (a key without any keepers). Function
+// returns a pointer to the key. FindKey will not mark the key as used.
 func (r *Instance) FindKey(recipients ...[]rune) *Key {
 	numberOfRecipients := len(recipients)
 	for i := range r.Keys {
@@ -356,6 +356,19 @@ func (r *Instance) FindKey(recipients ...[]rune) *Key {
 	}
 	// If we reached here, we found no key.
 	return nil
+}
+
+// MarkKeyUsed() looks for the keyId among the instance's Keys and sets the Used
+// property to true or false depending on what the "used" variable is set to.
+func (r *Instance) MarkKeyUsed(keyId []rune, used bool) error {
+	k := strings.ToUpper(strings.TrimSpace(string(keyId)))
+	for i := range r.Keys {
+		if k == string(r.Keys[i].Id) {
+			r.Keys[i].Used = used
+			return nil
+		}
+	}
+	return fmt.Errorf("key %s not found", k)
 }
 
 // EnrichWithKey finds the first appropriate key for this Message structure
@@ -430,8 +443,7 @@ func (t *Message) Encipher() error {
 	// with a key. The last chunk need to fill out with table changers (Z) so that
 	// the sum of the length of all chunks are divided by GroupSize without a
 	// remainder (mod % GroupSize).
-	t.EncodedChunks = make([]Chunk, 0, DefaultChunkCapacity)
-
+	chunks := make([]Chunk, 0, DefaultChunkCapacity)
 	chunk := Chunk{
 		EncodedText: make([]rune, 0, DefaultEncodedTextCapacity),
 		KeyId:       make([]rune, 0, t.instance.GroupSize),
@@ -441,20 +453,37 @@ func (t *Message) Encipher() error {
 
 	// If something fails, we need to release all keys we have used.
 	releaseKeys := false
-	defer func(do *bool) {
-		// if *do {
-		// mark all keys as unused in chunk and t.EncodedChunks
-		// wipe all chunks and chunk
-		// }
-	}(&releaseKeys)
+	//defer func(do *bool) {
+	defer func() {
+		//if *do {
+		if releaseKeys {
+			t.instance.MarkKeyUsed(t.KeyId, false)
+			Wipe(&t.KeyId)
+			t.instance.MarkKeyUsed(chunk.KeyId, false)
+			chunk.Wipe()
+			for i := range chunks {
+				t.instance.MarkKeyUsed(chunks[i].KeyId, false)
+				chunks[i].Wipe()
+			}
+		}
+	}()
+	//}(&releaseKeys)
 
 	for i := range t.PlainText {
-		// continue here
 		if state.charCounter >= t.instance.KeyLength-t.instance.GroupSize-ControlCharactersNeededToChangeKey {
+			keyPtr := t.instance.FindKey(t.Recipients...)
+			if keyPtr == nil {
+				releaseKeys = true
+				return errors.New("can not encipher multi-key message, unable to find additional key(s)")
+			}
+			keyPtr.Used = true
+
+			// continue here
+
 			// find a key
 			// mark key as used
 			// add key changer character and keyid to chunk.EncodedText (state.changeKey or something)
-			// append chunk to t.EncodedChunks
+			// append chunk to chunks
 			// wipe temp chunk
 			// set found new key as chunk.KeyId
 			// Reset state

@@ -91,14 +91,14 @@ type Key struct {
 // your instace's Keys slice it will be fetched from the database or fail. The
 // KeyId should be the first group in your received message.
 type Message struct {
-	GroupCount    int      `json:",omitempty"`
-	KeyId         []rune   `json:",omitempty"`
-	PlainText     []rune   `json:",omitempty"`
-	Binary        []byte   `json:",omitempty"`
-	EncodedChunks []Chunk  `json:",omitempty"`
-	CipherText    []rune   `json:",omitempty"`
-	Recipients    [][]rune `json:",omitempty"`
-	instance      *Instance
+	GroupCount int    `json:",omitempty"`
+	KeyId      []rune `json:",omitempty"`
+	PlainText  []rune `json:",omitempty"`
+	Binary     []byte `json:",omitempty"`
+	CipherText []rune `json:",omitempty"`
+	//EncodedChunks []Chunk  `json:",omitempty"`
+	Recipients [][]rune `json:",omitempty"`
+	instance   *Instance
 }
 
 // A chunk is either the complete PlainText encoded or - if the message is too
@@ -298,10 +298,11 @@ func (t *Message) RandomWipe() {
 		}
 	}
 	t.KeyId = nil
-	// wipe Chunks
-	for x := range t.EncodedChunks {
-		t.EncodedChunks[x].RandomWipe()
-	}
+	/* 	// wipe Chunks
+	   	for x := range t.EncodedChunks {
+	   		t.EncodedChunks[x].RandomWipe()
+	   	}
+	*/
 }
 
 // ZeroWipe assigned method for PlainText writes zeroes to Text and EncodedText
@@ -324,10 +325,11 @@ func (t *Message) ZeroWipe() {
 		t.KeyId[i] = 0
 	}
 	t.KeyId = nil
-	// wipe Chunks
-	for x := range t.EncodedChunks {
-		t.EncodedChunks[x].ZeroWipe()
-	}
+	/* 	// wipe Chunks
+	   	for x := range t.EncodedChunks {
+	   		t.EncodedChunks[x].ZeroWipe()
+	   	}
+	*/
 }
 
 // Wipe overwrites a chunk with either random runes or zeroes.
