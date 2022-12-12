@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/sa6mwa/krypto431/diana"
 )
 
 var (
@@ -54,10 +56,11 @@ const (
 	// changed, the state is reset starting at the primary group un-shifted.
 	changeKeyChar rune = 'Y'
 
-	// nextTableChar switches to the next table (if 3 table, then mod(3))
+	// nextTableChar switches to the next table (3 tables, then mod(3))
 	nextTableChar rune = 'Z'
 
-	// How many instructional runes/characters are required to change key?
+	// How many instructional runes/characters are required to change key at most?
+	// (change table, then changeKeyChar = 2)
 	ControlCharactersNeededToChangeKey int = 2
 )
 
@@ -184,14 +187,15 @@ func (state *codecState) toggleCase(output *[]rune) error {
 }
 
 func (state *codecState) toggleBinary(output *[]rune) error {
-	if output != nil {
-		err := state.gotoTable(secondaryTable, output)
-		if err != nil {
-			return err
-		}
-		*output = append(*output, binaryToggleChar)
-		state.charCounter++
+	if output == nil {
+		return ErrNilPointer
 	}
+	err := state.gotoTable(secondaryTable, output)
+	if err != nil {
+		return err
+	}
+	*output = append(*output, binaryToggleChar)
+	state.charCounter++
 	state.binary = !state.binary
 	return nil
 }
@@ -220,6 +224,42 @@ func (state *codecState) gotoTable(table int, output *[]rune) error {
 			break
 		}
 		state.nextTable(output)
+	}
+	return nil
+}
+
+// changeKey adds the control character and key id necessary to change to
+// another key. The character immediately following what this function writes
+// must use the new key to encipher or decipher rest of the encoded text. When
+// using the new key to cipher the first character, the state should have been
+// reset to the initial state. NB! This function does not validate that Key is a
+// valid key. Don't forget to state.reset() after calling this function.
+func (state *codecState) changeKey(key *Key, output *[]rune) error {
+	if output == nil || key == nil {
+		return ErrNilPointer
+	}
+	err := state.gotoTable(secondaryTable, output)
+	if err != nil {
+		return err
+	}
+	*output = append(*output, changeKeyChar)
+	state.charCounter++
+	*output = append(*output, key.Id...)
+	state.charCounter = state.charCounter + len(key.Id)
+	return nil
+}
+
+// pad() adds numberOfCharacters of nextTableChar (Z) at the end of
+// output rune slice. Function is used to extend an encoded text into an even
+// amount of 5 character groups. Suggested calculation of numberOfCharacters:
+// (t.instance.GroupSize - (lengthOfAllEncodedTexts % t.instance.GroupSize)) % t.instance.GroupSize
+func (state *codecState) pad(numberOfCharacters int, output *[]rune) error {
+	if output == nil {
+		return ErrNilPointer
+	}
+	for i := 0; i < numberOfCharacters; i++ {
+		*output = append(*output, nextTableChar)
+		state.charCounter++
 	}
 	return nil
 }
@@ -358,6 +398,18 @@ func (r *Instance) FindKey(recipients ...[]rune) *Key {
 	return nil
 }
 
+// GetKey() searches for a Key object with an Id of keyId and returns a pointer
+// to this Key or error if not found.
+func (r *Instance) GetKey(keyId []rune) (*Key, error) {
+	k := strings.ToUpper(strings.TrimSpace(string(keyId)))
+	for i := range r.Keys {
+		if k == string(r.Keys[i].Id) {
+			return &r.Keys[i], nil
+		}
+	}
+	return nil, fmt.Errorf("key %s not found", k)
+}
+
 // MarkKeyUsed() looks for the keyId among the instance's Keys and sets the Used
 // property to true or false depending on what the "used" variable is set to.
 func (r *Instance) MarkKeyUsed(keyId []rune, used bool) error {
@@ -444,15 +496,12 @@ func (t *Message) Encipher() error {
 	// the sum of the length of all chunks are divided by GroupSize without a
 	// remainder (mod % GroupSize).
 	chunks := make([]Chunk, 0, DefaultChunkCapacity)
-	chunk := Chunk{
-		EncodedText: make([]rune, 0, DefaultEncodedTextCapacity),
-		KeyId:       make([]rune, 0, t.instance.GroupSize),
-	}
+	chunk := NewChunk(t.instance.GroupSize)
 	// First chunk obviously uses the message key id...
 	chunk.KeyId = t.KeyId
 
 	// If something fails, we need to release all keys we have used.
-	releaseKeys := false
+	releaseKeys := true
 	//defer func(do *bool) {
 	defer func() {
 		//if *do {
@@ -460,11 +509,11 @@ func (t *Message) Encipher() error {
 			t.instance.MarkKeyUsed(t.KeyId, false)
 			Wipe(&t.KeyId)
 			t.instance.MarkKeyUsed(chunk.KeyId, false)
-			chunk.Wipe()
 			for i := range chunks {
 				t.instance.MarkKeyUsed(chunks[i].KeyId, false)
 				chunks[i].Wipe()
 			}
+			chunk.Wipe()
 		}
 	}()
 	//}(&releaseKeys)
@@ -473,37 +522,82 @@ func (t *Message) Encipher() error {
 		if state.charCounter >= t.instance.KeyLength-t.instance.GroupSize-ControlCharactersNeededToChangeKey {
 			keyPtr := t.instance.FindKey(t.Recipients...)
 			if keyPtr == nil {
-				releaseKeys = true
 				return errors.New("can not encipher multi-key message, unable to find additional key(s)")
 			}
+			err := state.changeKey(keyPtr, &chunk.EncodedText)
+			if err != nil {
+				return err
+			}
 			keyPtr.Used = true
-
-			// continue here
-
-			// find a key
-			// mark key as used
-			// add key changer character and keyid to chunk.EncodedText (state.changeKey or something)
-			// append chunk to chunks
-			// wipe temp chunk
-			// set found new key as chunk.KeyId
-			// Reset state
+			chunks = append(chunks, chunk)
+			chunk = NewChunk(t.instance.GroupSize)
+			chunk.KeyId = keyPtr.Id
 			state.reset()
 		}
 
-		err := state.encodeCharacter(&t.PlainText[i], &chunk)
+		err := state.encodeCharacter(&t.PlainText[i], &chunk.EncodedText)
 		if err != nil {
-			releaseKeys = true
 			return err
 		}
 	}
 
 	// count length of all chunks and make sure the last chunk compensates for modulo GroupSize
-	// if the last chunk
+	// length of all EncodedTexts.
+	// Last chunk is current chunk...
+	lengthOfAllEncodedTexts := len(chunk.EncodedText)
+	for i := range chunks {
+		lengthOfAllEncodedTexts += len(chunks[i].EncodedText)
+	}
+	err = state.pad((t.instance.GroupSize-(lengthOfAllEncodedTexts%t.instance.GroupSize))%t.instance.GroupSize, &chunk.EncodedText)
+	if err != nil {
+		return err
+	}
+	// Finally, add the current chunk to the slice...
+	chunks = append(chunks, chunk)
 
-	// encipher() encodedText with key
+	//
+	// encipher() each EncodedText with key...
+	//
 
-	//continue here
+	for i := range chunks {
+		keyPtr, err := t.instance.GetKey(chunks[i].KeyId)
+		if err != nil {
+			return err
+		}
+		if len(chunks[i].EncodedText) > len(keyPtr.Runes) {
+			tooShortKeyMsg := "key %s is too short to encipher chunk %d "
+			if len(chunks) > 1 {
+				tooShortKeyMsg += "out of %d chunks"
+			} else {
+				tooShortKeyMsg += "(message is only %d chunk)"
+			}
+			return fmt.Errorf(tooShortKeyMsg, string(keyPtr.Id), i+1, len(chunks))
+		}
 
+		for ki := range chunks[i].EncodedText {
+			var output rune
+			err := diana.TrigraphRune(&output, &keyPtr.Runes[ki], &chunks[i].EncodedText[ki])
+			if err != nil {
+				return err
+			}
+			t.CipherText = append(t.CipherText, output)
+		}
+	}
+
+	for i := range chunks {
+		grouped, err := groups(&chunks[i].EncodedText, t.instance.GroupSize)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("key: %s, enctxt: %s\n", string(chunks[i].KeyId), string(*grouped))
+	}
+
+	grouped, err := groups(&t.CipherText, t.instance.GroupSize)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("        ciphertext: %s\n", string(*grouped))
+
+	releaseKeys = false
 	return nil
-
 }

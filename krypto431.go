@@ -33,16 +33,16 @@ type Krypto431 interface {
 const (
 	defaultSaveFile            string = "~/.krypto431.gob"
 	defaultGroupSize           int    = 5
-	defaultKeyLength           int    = 280 // same as Twitter
+	defaultKeyLength           int    = 130 // Two rows of 13 groups (5 chars) per 80 char row, 65 chars per row.
 	defaultColumns             int    = 80
 	defaultMakePDF             bool   = false
 	defaultMakeTextFiles       bool   = false
 	useCrandWipe               bool   = true
-	DefaultKeyCapacity         int    = 1000 // 1000 keys
-	DefaultChunkCapacity       int    = 20   // 20 chunks
+	DefaultKeyCapacity         int    = 100000 // 100k keys
+	DefaultChunkCapacity       int    = 20     // 20 chunks
 	DefaultEncodedTextCapacity int    = defaultKeyLength * 2
-	DefaultMessageCapacity     int    = 1000                  // 1000 messages
-	DefaultPlainTextCapacity   int    = defaultKeyLength * 20 // 5600
+	DefaultMessageCapacity     int    = 10000                                   // 10k messages
+	DefaultPlainTextCapacity   int    = defaultKeyLength * DefaultChunkCapacity // 2600
 )
 
 // Instance stores generated keys, plaintext, ciphertext, callsign(s) and
@@ -108,6 +108,14 @@ type Message struct {
 type Chunk struct {
 	EncodedText []rune `json:",omitempty"`
 	KeyId       []rune `json:",omitempty"`
+}
+
+// Returns an initialized Chunk (groupsize is usually msg.instance.GroupSize).
+func NewChunk(groupSize int) Chunk {
+	return Chunk{
+		EncodedText: make([]rune, 0, DefaultEncodedTextCapacity),
+		KeyId:       make([]rune, 0, groupSize),
+	}
 }
 
 // Wipe wipes a rune slice.
@@ -637,15 +645,9 @@ func (r *Instance) NewTextMessage(msg ...string) (err error) {
 	no err when key already present, and marked not used
 	no err when ciphertext is already present, just return
 	if there are no Recipients, find key that also has no Keepers (empty Keepers) / or my CS by default?
-
 	*/
 
 	err = message.Encipher()
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("%+v\n", message)
 	return err
 }
 

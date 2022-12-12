@@ -26,9 +26,13 @@ func main() {
 	}
 
 	//k.NewTextMessage("Hello world", "VQ, KA", "HELLO")
-	err := k.NewTextMessage("Hello world")
+	err := k.NewTextMessage("Hej, how is it? Hello world")
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	for i := range k.Messages {
+		k.Messages[i].Encipher()
 	}
 
 	//k.Save()
