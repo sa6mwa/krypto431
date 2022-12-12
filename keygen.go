@@ -24,7 +24,8 @@ func (r *Instance) ContainsKeyId(keyId *[]rune) bool {
 }
 
 // NewKey generates a new key. The current implementation generates a random
-// group not in the Instance construct.
+// group not yet in the Instance construct. Keepers can be one call-sign per
+// variadic, comma-separated call-signs or a combination of both.
 func (r *Instance) NewKey(keepers ...string) *[]rune {
 	key := Key{
 		Id:       make([]rune, r.GroupSize),
@@ -34,7 +35,13 @@ func (r *Instance) NewKey(keepers ...string) *[]rune {
 	}
 
 	for i := range keepers {
-		key.Keepers = append(key.Keepers, []rune(strings.ToUpper(strings.TrimSpace(keepers[i]))))
+		subKeepers := strings.Split(keepers[i], ",")
+		for a := range subKeepers {
+			vettedKeeper := []rune(strings.ToUpper(strings.TrimSpace(subKeepers[a])))
+			if len(vettedKeeper) > 0 {
+				key.Keepers = append(key.Keepers, vettedKeeper)
+			}
+		}
 	}
 
 	for { // if we already have 26*26*26*26*26 keys, this is an infinite loop :)

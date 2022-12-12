@@ -29,20 +29,20 @@ type Krypto431 interface {
 	GroupsBlock()
 }
 
-// defaults
+// defaults, most are exported
 const (
-	defaultSaveFile            string = "~/.krypto431.gob"
-	defaultGroupSize           int    = 5
-	defaultKeyLength           int    = 130 // Two rows of 13 groups (5 chars) per 80 char row, 65 chars per row.
-	defaultColumns             int    = 80
-	defaultMakePDF             bool   = false
-	defaultMakeTextFiles       bool   = false
 	useCrandWipe               bool   = true
+	DefaultGroupSize           int    = 5
+	DefaultKeyLength           int    = 130 // Two rows of 13 groups (5 chars) per 80 char row, 65 chars per row.
+	DefaultColumns             int    = 80
+	DefaultMakePDF             bool   = false
+	DefaultMakeTextFiles       bool   = false
+	DefaultSaveFile            string = "~/.krypto431.gob"
 	DefaultKeyCapacity         int    = 100000 // 100k keys
 	DefaultChunkCapacity       int    = 20     // 20 chunks
-	DefaultEncodedTextCapacity int    = defaultKeyLength * 2
+	DefaultEncodedTextCapacity int    = DefaultKeyLength * 2
 	DefaultMessageCapacity     int    = 10000                                   // 10k messages
-	DefaultPlainTextCapacity   int    = defaultKeyLength * DefaultChunkCapacity // 2600
+	DefaultPlainTextCapacity   int    = DefaultKeyLength * DefaultChunkCapacity // 2600
 )
 
 // Instance stores generated keys, plaintext, ciphertext, callsign(s) and
@@ -392,13 +392,13 @@ func (c *Chunk) ZeroWipe() error {
 // New creates a new Instance construct
 func New(opts ...Option) Instance {
 	i := Instance{
-		saveFile:                 defaultSaveFile,
+		saveFile:                 DefaultSaveFile,
 		createSaveFileIfNotExist: false,
-		GroupSize:                defaultGroupSize,
-		KeyLength:                defaultKeyLength,
-		Columns:                  defaultColumns,
-		MakePDF:                  defaultMakePDF,
-		MakeTextFiles:            defaultMakeTextFiles,
+		GroupSize:                DefaultGroupSize,
+		KeyLength:                DefaultKeyLength,
+		Columns:                  DefaultColumns,
+		MakePDF:                  DefaultMakePDF,
+		MakeTextFiles:            DefaultMakeTextFiles,
 		Keys:                     make([]Key, 0, DefaultKeyCapacity),
 		Messages:                 make([]Message, 0, DefaultMessageCapacity),
 	}

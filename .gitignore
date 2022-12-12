@@ -1,5 +1,6 @@
 *.exe
 *.key
+*.gob
 TEST.PNG
 /t
 /krypto431
