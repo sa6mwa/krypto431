@@ -214,10 +214,11 @@ func (k *Key) ZeroWipe() error {
 	return nil
 }
 
-// groups returns a rune slice where each group is
-// separated by a space. Don't forget to Wipe(myRuneSlice) when you are
-// done!
-func groups(input *[]rune, groupsize int) (*[]rune, error) {
+// Returns a rune slice where each group is separated by a space. If columns is
+// above 0 the function will insert a line break instead of a space before
+// extending beyond that column length. Don't forget to Wipe(myRuneSlice) when
+// you are done!
+func groups(input *[]rune, groupsize int, columns int) (*[]rune, error) {
 	if input == nil {
 		return nil, ErrNilPointer
 	}
@@ -226,12 +227,20 @@ func groups(input *[]rune, groupsize int) (*[]rune, error) {
 	}
 	output := make([]rune, 0, int(math.Ceil(float64(len(*input))/float64(groupsize)))*(groupsize+1))
 	runeCount := 0
+	outCount := 0
 	for i := 0; i < len(*input); i++ {
 		output = append(output, (*input)[i])
+		outCount++
 		runeCount++
 		if runeCount == groupsize {
 			if i != len(*input)-1 {
-				output = append(output, rune(' '))
+				if columns > 0 && outCount >= columns-groupsize-1 {
+					output = append(output, []rune(LineBreak)...)
+					outCount = 0
+				} else {
+					output = append(output, rune(' '))
+					outCount++
+				}
 			}
 			runeCount = 0
 		}
@@ -242,14 +251,14 @@ func groups(input *[]rune, groupsize int) (*[]rune, error) {
 // Groups for keys return a rune slice where each number of GroupSize runes are
 // separated by a space. Don't forget to Wipe() this slice when you are done!
 func (k *Key) Groups() (*[]rune, error) {
-	return groups(&k.Runes, k.instance.GroupSize)
+	return groups(&k.Runes, k.instance.GroupSize, 0)
 }
 
 // Groups for messages return a rune slice where each group (GroupSize) is
 // separated by space. Don't forget to Wipe() this slice when you are done!
 func (t *Message) Groups() (*[]rune, error) {
 	// There is no need to group the Message (non-encoded) field.
-	return groups(&t.CipherText, t.instance.GroupSize)
+	return groups(&t.CipherText, t.instance.GroupSize, 0)
 }
 
 // GroupsBlock returns a string representation of the key where each group is
@@ -257,12 +266,12 @@ func (t *Message) Groups() (*[]rune, error) {
 // Instance.Columns (or defaultColumns). Don't forget to Wipe(b []rune) this
 // slice when you are done!
 func (k *Key) GroupsBlock() (*[]rune, error) {
-	return nil, nil
+	return groups(&k.Runes, k.instance.GroupSize, k.instance.Columns)
 }
 
 // GroupsBlock for Message
 func (t *Message) GroupsBlock() (*[]rune, error) {
-	return nil, nil
+	return groups(&t.CipherText, t.instance.GroupSize, t.instance.Columns)
 }
 
 // Wipe overwrites key, plaintext and ciphertext with random runes or zeroes.
@@ -637,7 +646,7 @@ func (r *Instance) NewTextMessage(msg ...string) (err error) {
 	if len(msg) >= 3 {
 		message.KeyId = []rune(strings.ToUpper(strings.TrimSpace(msg[2])))
 		if len(message.KeyId) != r.GroupSize {
-			return fmt.Errorf("keyid \"%s\" must be %d characters long (the configured group size)", string(message.KeyId), r.GroupSize)
+			return fmt.Errorf("key id \"%s\" must be %d characters long (the configured group size)", string(message.KeyId), r.GroupSize)
 		}
 	}
 
@@ -665,4 +674,38 @@ func RunesToStrings(runes *[][]rune) (stringSlice []string) {
 		stringSlice = append(stringSlice, string((*runes)[i]))
 	}
 	return
+}
+
+// Generic function to vet one or more keeper strings, comma-separated or not.
+func VettedKeepers(keepers ...string) (vettedKeepers [][]rune) {
+	for i := range keepers {
+		subKeepers := strings.Split(keepers[i], ",")
+		for a := range subKeepers {
+			vettedKeeper := []rune(strings.ToUpper(strings.TrimSpace(subKeepers[a])))
+			if len(vettedKeeper) > 0 {
+				vettedKeepers = append(vettedKeepers, vettedKeeper)
+			}
+		}
+	}
+	return
+}
+
+// Function to compare two rune slices. Returns true if they are equal, false if
+// not.
+func EqualRunes(a *[]rune, b *[]rune) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	if len(*a) != len(*b) {
+		return false
+	}
+	for x := range *a {
+		if (*a)[x] != (*b)[x] {
+			return false
+		}
+	}
+	return true
 }

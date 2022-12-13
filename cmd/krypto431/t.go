@@ -84,6 +84,29 @@ func main() {
 					},
 				},
 			},
+			{
+				Name:   "listkeys",
+				Usage:  "List keys",
+				Action: listKeys,
+				Flags: []cli.Flag{
+					&cli.StringSliceFlag{
+						Name:    "keepers",
+						Aliases: []string{"k"},
+						Usage:   "Filter on keeper of keys (if empty, only anonymous keys are listed). OR is default logic for multiple keepers",
+					},
+					&cli.BoolFlag{
+						Name:    "and",
+						Aliases: []string{"a"},
+						Usage:   "Change keepers filter logic to AND, e.g keeper X and Y instead of X or Y",
+						Value:   false,
+					},
+					&cli.BoolFlag{
+						Name:  "all",
+						Usage: "List all keys",
+						Value: false,
+					},
+				},
+			},
 		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{
@@ -114,7 +137,7 @@ func dev(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("%d (id: %s, used: %t, keepers: %s):\n'%s'\n\n", len(k.Keys[i].Runes), string(k.Keys[i].Id), k.Keys[i].Used, strings.Join(krypto431.RunesToStrings(&k.Keys[i].Keepers), ","), string(*groups))
+		fmt.Printf("%d (id: %s, used: %t, keepers: %s):\n'%s'\n\n", len(k.Keys[i].Runes), string(k.Keys[i].Id), k.Keys[i].Used, strings.Join(krypto431.RunesToStrings(&k.Keys[i].Keepers), ", "), string(*groups))
 		krypto431.Wipe(groups)
 	}
 
@@ -173,6 +196,101 @@ func generateKeys(c *cli.Context) error {
 		return err
 	}
 	fmt.Printf("Generated %d keys\n", numberOfKeys)
+	return nil
+}
+
+func listKeys(c *cli.Context) error {
+	saveFile := c.String("file")
+	keepers := krypto431.VettedKeepers(c.StringSlice("keepers")...)
+	and := c.Bool("and")
+	all := c.Bool("all")
+
+	k := krypto431.New(krypto431.WithSaveFile(saveFile))
+	err := k.Load()
+	if err != nil {
+		return err
+	}
+
+	sv := fmt.Sprintf("%%-%ds", k.GroupSize+1)
+	headerFormat := sv + "%s" + LineBreak + sv + "%s" + LineBreak
+	anonKeyStr := "Unknown (anonymous key)"
+
+listKeysMainLoop:
+	for i := range k.Keys {
+		if all {
+			kprs := anonKeyStr
+			if len(k.Keys[i].Keepers) > 0 {
+				kprs = strings.Join(krypto431.RunesToStrings(&k.Keys[i].Keepers), ", ")
+			}
+			fmt.Printf(headerFormat, "ID:", "Keepers:", string(k.Keys[i].Id), kprs)
+			groups, err := k.Keys[i].GroupsBlock()
+			if err != nil {
+				return err
+			}
+			fmt.Print(string(*groups) + LineBreak + LineBreak)
+			err = krypto431.Wipe(groups)
+			if err != nil {
+				return err
+			}
+		} else {
+			if len(keepers) > 0 {
+				// List keys with keepers (not anonymous).
+				if len(k.Keys[i].Keepers) > 0 {
+					if and {
+						for x := range keepers {
+							foundKey := false
+							for y := range k.Keys[i].Keepers {
+								if krypto431.EqualRunes(&keepers[x], &k.Keys[i].Keepers[y]) {
+									foundKey = true
+								}
+							}
+							if !foundKey {
+								continue listKeysMainLoop
+							}
+						}
+					} else {
+						foundOneKey := false
+					listKeysOrOuterLoop:
+						for x := range keepers {
+							for y := range k.Keys[i].Keepers {
+								if krypto431.EqualRunes(&keepers[x], &k.Keys[i].Keepers[y]) {
+									foundOneKey = true
+									break listKeysOrOuterLoop
+								}
+							}
+						}
+						if !foundOneKey {
+							continue
+						}
+					}
+					fmt.Printf(headerFormat, "ID:", "Keepers:", string(k.Keys[i].Id), strings.Join(krypto431.RunesToStrings(&k.Keys[i].Keepers), ", "))
+					groups, err := k.Keys[i].GroupsBlock()
+					if err != nil {
+						return err
+					}
+					fmt.Print(string(*groups) + LineBreak + LineBreak)
+					err = krypto431.Wipe(groups)
+					if err != nil {
+						return err
+					}
+				}
+			} else {
+				// List anonymous keys only.
+				if len(k.Keys[i].Keepers) == 0 {
+					fmt.Printf(headerFormat, "ID:", "Keepers:", string(k.Keys[i].Id), anonKeyStr)
+					groups, err := k.Keys[i].GroupsBlock()
+					if err != nil {
+						return err
+					}
+					fmt.Print(string(*groups) + LineBreak + LineBreak)
+					err = krypto431.Wipe(groups)
+					if err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
 	return nil
 }
 

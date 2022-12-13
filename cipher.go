@@ -585,14 +585,14 @@ func (t *Message) Encipher() error {
 	}
 
 	for i := range chunks {
-		grouped, err := groups(&chunks[i].EncodedText, t.instance.GroupSize)
+		grouped, err := groups(&chunks[i].EncodedText, t.instance.GroupSize, 0)
 		if err != nil {
 			return err
 		}
 		fmt.Printf("key: %s, enctxt: %s\n", string(chunks[i].KeyId), string(*grouped))
 	}
 
-	grouped, err := groups(&t.CipherText, t.instance.GroupSize)
+	grouped, err := groups(&t.CipherText, t.instance.GroupSize, 0)
 	if err != nil {
 		return err
 	}

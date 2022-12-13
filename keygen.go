@@ -3,8 +3,6 @@ package krypto431
 import (
 	"fmt"
 	"math"
-	"runtime"
-	"strings"
 
 	"github.com/sa6mwa/krypto431/crand"
 )
@@ -34,15 +32,7 @@ func (r *Instance) NewKey(keepers ...string) *[]rune {
 		instance: r,
 	}
 
-	for i := range keepers {
-		subKeepers := strings.Split(keepers[i], ",")
-		for a := range subKeepers {
-			vettedKeeper := []rune(strings.ToUpper(strings.TrimSpace(subKeepers[a])))
-			if len(vettedKeeper) > 0 {
-				key.Keepers = append(key.Keepers, vettedKeeper)
-			}
-		}
-	}
+	key.Keepers = VettedKeepers(keepers...)
 
 	for { // if we already have 26*26*26*26*26 keys, this is an infinite loop :)
 		for i := range key.Id {
@@ -51,9 +41,12 @@ func (r *Instance) NewKey(keepers ...string) *[]rune {
 		if !r.ContainsKeyId(&key.Id) {
 			break
 		}
-		// 2 next lines for debugging, will be removed
-		_, fn, line, _ := runtime.Caller(1)
-		fmt.Printf("key exists looping (%s line %d)\n", fn, line)
+		fmt.Printf("Key %s already exist, retrying..."+LineBreak, string(key.Id))
+		/*
+			 		// 2 next lines for debugging, will be removed
+					_, fn, line, _ := runtime.Caller(1)
+					fmt.Printf("key exists looping (%s line %d)\n", fn, line)
+		*/
 	}
 	for i := range key.Runes {
 		key.Runes[i] = rune(crand.Intn(26)) + rune('A')
