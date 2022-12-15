@@ -17,7 +17,15 @@ import (
 )
 
 var (
-	ErrNilPointer = errors.New("received a nil pointer")
+	ErrNilPointer         = errors.New("received a nil pointer")
+	ErrNoCipherText       = errors.New("message cipher text is too short to decipher")
+	ErrNoKey              = errors.New("message has an invalid or no key")
+	ErrKeyNotFound        = errors.New("key not found")
+	ErrInvalidCoding      = errors.New("invalid character in encoded text (must be between A-Z)")
+	ErrInvalidControlChar = errors.New("invalid control character")
+	ErrTableTooShort      = errors.New("out-of-bounds, character table is too short")
+	ErrUnsupportedTable   = errors.New("character table not supported")
+	ErrOutOfKeys          = errors.New("can not encipher multi-key message, unable to find additional key(s)")
 )
 
 // Krypto431 is the interface. Each struct must have these assigned methods.
@@ -657,7 +665,11 @@ func (r *Instance) NewTextMessage(msg ...string) (err error) {
 	*/
 
 	err = message.Encipher()
-	return err
+	if err != nil {
+		return err
+	}
+	r.Messages = append(r.Messages, message)
+	return nil
 }
 
 // TODO: Implement! :)

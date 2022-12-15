@@ -20,9 +20,11 @@ var (
 	// X in 2nd = switch case (toggle case like CAPS LOCK)
 	// Y in 2nd = change key (followed by 5 character key after which the table is reset)
 
-	//CharacterTablePrimary   []rune   = []rune(`ABCDEFGHIJKLMNOP RSTUVWXY¤`)
-	//CharacterTableSecondary []rune   = []rune(`0123456789ÅÄÖÆØ¤Q¤Z¤¤¤¤¤¤¤`)
-	//CharacterTableTertiary  []rune   = []rune(`{}:,\[]"?!@#%&*.?-/+_=¤¤¤¤`)
+	// Encoding uses two character tables (primary and secondary). NB! Any changes
+	// to the control characters in these tables need to be reflected in the
+	// encodeCharacter() and decodeCharacter() functions.
+	// CharacterTablePrimary = `ABCDEFGHIJKLMNOP RSTUVWXY¤`,
+	// CharacterTableSecondary = `0123456789?-ÅÄÖ.Q,Z:+/¤¤¤¤`
 	CharacterTables [][]rune = [][]rune{
 		CharacterTablePrimary, CharacterTableSecondary,
 	}
@@ -31,14 +33,10 @@ var (
 const (
 	primaryTable   int = 0
 	secondaryTable int = 1
-	//tertiaryTable  int = 2
 
-	// specialOpChar was dummyChar, means character has special meaning, see below...
+	// specialOpChar was dummyChar, means character has special meaning (a control
+	// character).
 	specialOpChar rune = '¤'
-
-	// caseToggleChar adds strings.ToLower() on every character depending on previous
-	// state (stateShift).
-	caseToggleChar rune = 'X'
 
 	// binaryModeChar changes into a binary-only mode where A-P is one nibble
 	// (meaning that 1 rune is 2 characters). To exit the binary mode, issue W
@@ -46,10 +44,9 @@ const (
 	// mode.
 	binaryToggleChar rune = 'W'
 
-	// resetAllChar re-initializes everything and goes back to the primary
-	// character table, resetAllChar is (so far) in both the primary and the
-	// secondary character table.
-	//resetAllChar rune = 'X'
+	// caseToggleChar adds strings.ToLower() on every character depending on previous
+	// state (stateShift).
+	caseToggleChar rune = 'X'
 
 	// changeKeyChar instructs that immediately after this character is the key
 	// id (always 1 group) to change to. After the key (1 group) has been
@@ -59,7 +56,10 @@ const (
 	// nextTableChar switches to the next table (3 tables, then mod(3))
 	nextTableChar rune = 'Z'
 
-	// How many instructional runes/characters are required to change key at most?
+	// spaceChar is not a control character, just the rune to represent space.
+	spaceChar rune = ' '
+
+	// How many control runes/characters are required to change key at most?
 	// (change table, then changeKeyChar = 2)
 	ControlCharactersNeededToChangeKey int = 2
 )
@@ -108,24 +108,28 @@ func toLower(c *rune, b *rune) {
 }
 
 type codecState struct {
-	keyIndex       int
-	table          int
-	numberOfTables int
-	charCounter    int
-	shift          bool
-	binary         bool
-	lowerNibble    bool
+	keyIndex         int
+	table            int
+	numberOfTables   int
+	charCounter      int
+	gotChangeKeyChar bool
+	keyChange        bool
+	shift            bool
+	binary           bool
+	lowerNibble      bool
 }
 
 func newState() *codecState {
 	return &codecState{
-		keyIndex:       0,
-		table:          0,
-		numberOfTables: len(CharacterTables),
-		charCounter:    0,
-		shift:          false,
-		binary:         false,
-		lowerNibble:    false,
+		keyIndex:         0,
+		table:            0,
+		numberOfTables:   len(CharacterTables),
+		charCounter:      0,
+		gotChangeKeyChar: false,
+		keyChange:        false,
+		shift:            false,
+		binary:           false,
+		lowerNibble:      false,
 	}
 }
 
@@ -160,6 +164,8 @@ func (state *codecState) reset() {
 	state.table = 0
 	state.numberOfTables = len(CharacterTables)
 	state.charCounter = 0
+	state.gotChangeKeyChar = false
+	state.keyChange = false
 	state.shift = false
 	state.binary = false
 	state.lowerNibble = false
@@ -187,15 +193,14 @@ func (state *codecState) toggleCase(output *[]rune) error {
 }
 
 func (state *codecState) toggleBinary(output *[]rune) error {
-	if output == nil {
-		return ErrNilPointer
+	if output != nil {
+		err := state.gotoTable(secondaryTable, output)
+		if err != nil {
+			return err
+		}
+		*output = append(*output, binaryToggleChar)
+		state.charCounter++
 	}
-	err := state.gotoTable(secondaryTable, output)
-	if err != nil {
-		return err
-	}
-	*output = append(*output, binaryToggleChar)
-	state.charCounter++
 	state.binary = !state.binary
 	return nil
 }
@@ -265,67 +270,128 @@ func (state *codecState) pad(numberOfCharacters int, output *[]rune) error {
 }
 
 // encodeCharacter figures out which character sequence to write into the
-// EncodedText field of a PlainText struct and adjust the state. When the first
-// rune that can not be found in one of the tables appear, we switch to binary
-// mode and will not exit this mode unless reaching the end or running out of
-// key runes (where it will switch to the next key).
+// EncodedText field and adjust the state. When the first rune that can not be
+// found in one of the tables appear, we switch to binary mode and will not exit
+// this mode unless reaching the end or running out of key runes (where it will
+// switch to the next key).
 func (state *codecState) encodeCharacter(input *rune, output *[]rune) error {
-	if !state.binary {
-		if (isUpper(input) && state.shift) || (isLower(input) && !state.shift) {
-			// need to shift/unshift...
-			err := state.toggleCase(output)
-			if err != nil {
-				return err
-			}
+	if state.binary {
+		return errors.New("binary mode not implemented yet")
+	}
+
+	if (isUpper(input) && state.shift) || (isLower(input) && !state.shift) {
+		// need to shift/unshift...
+		err := state.toggleCase(output)
+		if err != nil {
+			return err
 		}
-		// find character in one of the tables
-		c := *input
-		toUpper(&c, &c)
-		foundIt := false
-		for t := range CharacterTables {
-			for i, tc := range CharacterTables[t] {
-				if tc == specialOpChar {
-					// specialOpChar is not part of any character table, skip it
-					continue
-				}
-				if c == tc {
-					foundIt = true
-					err := state.gotoTable(t, output)
-					if err != nil {
-						return err
-					}
-					char := rune(i) + rune('A')
-					*output = append(*output, char)
-					state.charCounter++
-					char = 0
-					break
-				}
+	}
+	// find character in one of the tables
+	c := *input
+	toUpper(&c, &c)
+	foundIt := false
+	for t := range CharacterTables {
+		for i, tc := range CharacterTables[t] {
+			if tc == specialOpChar {
+				// specialOpChar is not part of any character table, skip it
+				continue
 			}
-			if foundIt {
+			if c == tc {
+				foundIt = true
+				err := state.gotoTable(t, output)
+				if err != nil {
+					return err
+				}
+				char := rune(i) + rune('A') // Column A-Z in the character table
+				*output = append(*output, char)
+				state.charCounter++
+				char = 0
 				break
 			}
 		}
-		// zero copy of rune
-		c = 0
-		if !foundIt {
-			// enter binary mode
-			panic("binary mode not implemented yet")
+		if foundIt {
+			break
 		}
-	} else {
+	}
+	// zero the copy of rune
+	c = 0
+	if !foundIt {
+		// enter binary mode
 		panic("binary mode not implemented yet")
 	}
+
 	return nil
 }
 
 func (state *codecState) decodeCharacter(input *rune, output *[]rune) error {
-	if !state.binary {
-	} else {
-		panic("binary mode not implemented yet")
+	if *input < rune('A') || *input > rune('Z') {
+		return ErrInvalidCoding
 	}
+
+	if state.binary {
+		return errors.New("binary mode not implemented yet")
+	}
+
+	// If previous char was a the changeKeyChar (Y), current character is the
+	// first of the new key to change to.
+	if state.gotChangeKeyChar {
+		state.gotChangeKeyChar = false
+		state.keyChange = true
+	}
+	// Since decodeCharacter() does not know how long a key id is (the instance's
+	// GroupSize), this state need to be reset from the calling function when the
+	// key id has been harvested from the deciphered text.
+	if state.keyChange {
+		return nil
+	}
+
+	// input character is an index (column) in one of the tables (state.table).
+	col := int(*input - rune('A'))
+	if col >= len(CharacterTables[state.table]) {
+		return ErrTableTooShort
+	}
+
+	char := CharacterTables[state.table][col]
+
+	if char == specialOpChar {
+		switch state.table {
+		case primaryTable:
+			// Only one control character in this table...
+			switch *input {
+			case nextTableChar:
+				state.nextTable(nil)
+			default:
+				return ErrInvalidControlChar
+			}
+		case secondaryTable:
+			// There are four control characters in this table...
+			switch *input {
+			case binaryToggleChar:
+				state.toggleBinary(nil)
+			case caseToggleChar:
+				state.toggleCase(nil)
+			case changeKeyChar:
+				state.gotChangeKeyChar = true
+			case nextTableChar:
+				state.nextTable(nil)
+			default:
+				return ErrInvalidControlChar
+			}
+		default:
+			return ErrUnsupportedTable
+		}
+	} else {
+		if state.shift && char != spaceChar {
+			toLower(&char, &char)
+		}
+		*output = append(*output, char)
+		state.charCounter++
+	}
+	char = 0
 	return nil
 }
 
-// Encode codes the PlainText field into the EncodedText field of a Message
+/* // Encode codes the PlainText field into the EncodedText field of a Message
 // struct. Encode will prepend one star (*) in the beginning and add a key
 // change if the message is more than Instance.KeyLength (minus characters
 // needed to make a key change) long and add a star (*) as a placeholder for a
@@ -349,6 +415,7 @@ func (t *Message) Encode() *[]rune {
 	//continue here
 	return &encodedText
 }
+*/
 
 /* // Decode decodes the EncodedText field into the PlainText field of a Message struct
 func (t *Message) Decode() error {
@@ -474,20 +541,18 @@ func (t *Message) EnrichWithKey() error {
 	return nil
 }
 
-// Encipher enciphers the PlainText field into the CipherText field of a Message
-// structure and wipes the PlainText field. Verbs like encrypt and decrypt are
-// only used for AES encryption/decryption of the save file, while words
-// encipher and decipher are used for message ciphering in Krypto431.
+// Encipher() enciphers the PlainText field into the CipherText field of a
+// Message object. Verbs encrypt and decrypt are only used for AES
+// encryption/decryption of the save file, while words encipher and decipher are
+// used for message ciphering in Krypto431.
 func (t *Message) Encipher() error {
 	err := t.EnrichWithKey()
 	if err != nil {
 		return fmt.Errorf("unable to enrich message with a key: %w", err)
 	}
-
 	Wipe(&t.CipherText)
 
 	// TODO: The encode phase should really go into a new Encode() function.
-
 	// Encode plaintext
 	state := newState()
 
@@ -522,7 +587,7 @@ func (t *Message) Encipher() error {
 		if state.charCounter >= t.instance.KeyLength-t.instance.GroupSize-ControlCharactersNeededToChangeKey {
 			keyPtr := t.instance.FindKey(t.Recipients...)
 			if keyPtr == nil {
-				return errors.New("can not encipher multi-key message, unable to find additional key(s)")
+				return ErrOutOfKeys
 			}
 			err := state.changeKey(keyPtr, &chunk.EncodedText)
 			if err != nil {
@@ -556,9 +621,8 @@ func (t *Message) Encipher() error {
 	chunks = append(chunks, chunk)
 
 	//
-	// encipher() each EncodedText with key...
+	// encipher() each EncodedText with each chunk's key...
 	//
-
 	for i := range chunks {
 		keyPtr, err := t.instance.GetKey(chunks[i].KeyId)
 		if err != nil {
@@ -573,7 +637,6 @@ func (t *Message) Encipher() error {
 			}
 			return fmt.Errorf(tooShortKeyMsg, string(keyPtr.Id), i+1, len(chunks))
 		}
-
 		for ki := range chunks[i].EncodedText {
 			var output rune
 			err := diana.TrigraphRune(&output, &keyPtr.Runes[ki], &chunks[i].EncodedText[ki])
@@ -589,15 +652,69 @@ func (t *Message) Encipher() error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("key: %s, enctxt: %s\n", string(chunks[i].KeyId), string(*grouped))
+		fmt.Printf("key: %s, enctxt: %s"+LineBreak, string(chunks[i].KeyId), string(*grouped))
 	}
 
 	grouped, err := groups(&t.CipherText, t.instance.GroupSize, 0)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("        ciphertext: %s\n", string(*grouped))
+	fmt.Printf("        ciphertext: %s"+LineBreak, string(*grouped))
 
 	releaseKeys = false
+	return nil
+}
+
+// Decipher() deciphers the CipherText field info the PlainText field of a
+// Message object. Decipher() does not use a separate decoding function as
+// simultaneous decoding is needed to support CipherText enciphered with
+// multiple keys.
+func (t *Message) Decipher() error {
+	if len(t.KeyId) != t.instance.GroupSize {
+		return ErrNoKey
+	}
+	if len(t.CipherText) < t.instance.GroupSize {
+		return ErrNoCipherText
+	}
+	keyPtr, err := t.instance.GetKey(t.KeyId)
+	if err != nil {
+		return err
+	}
+	Wipe(&t.PlainText)
+	keyIndexCounter := 0
+	nextKey := make([]rune, 0, t.instance.GroupSize)
+	state := newState()
+	for i := range t.CipherText {
+		var encodedChar rune
+		if keyIndexCounter >= len(keyPtr.Runes) {
+			fmt.Printf("%d (keylen=%d)\n", keyIndexCounter, len(keyPtr.Runes))
+			return fmt.Errorf("out-of-key error, %s is too short", string(keyPtr.Id))
+		}
+		err := diana.TrigraphRune(&encodedChar, &keyPtr.Runes[keyIndexCounter], &t.CipherText[i])
+		if err != nil {
+			return err
+		}
+		keyIndexCounter++
+		err = state.decodeCharacter(&encodedChar, &t.PlainText)
+		if err != nil {
+			return err
+		}
+		if state.keyChange {
+			nextKey = append(nextKey, encodedChar)
+			if len(nextKey) >= t.instance.GroupSize {
+				var err error
+				keyPtr, err = t.instance.GetKey(nextKey)
+				if err != nil {
+					return err
+				}
+				keyIndexCounter = 0
+				Wipe(&nextKey)
+				state.reset()
+			}
+		}
+	}
+
+	fmt.Println(string(t.PlainText))
+
 	return nil
 }

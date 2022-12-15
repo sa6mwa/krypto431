@@ -17,9 +17,19 @@ func fatalf(format string, a ...any) {
 
 func main() {
 	app := &cli.App{
-		Name:      "krypto431",
-		Usage:     "CADCRYS: the Computer-Aided Diana Cryptosystem",
-		Copyright: "(C) SA6MWA 2021-2023 sa6mwa@gmail.com, https://github.com/sa6mwa/krypto431",
+		Name: "krypto431",
+		Authors: []*cli.Author{
+			{
+				Name:  "SA6MWA Michel",
+				Email: "sa6mwa@gmail.com",
+			},
+			{
+				Name:  "SA4LGZ Patrik",
+				Email: "patrik@ramnet.se",
+			},
+		},
+		Usage:     "CADCRYS (The Computer-Aided DIANA Cryptosystem)",
+		Copyright: "(C) 2021-2023 Michel Blomgren, https://github.com/sa6mwa/krypto431",
 		Commands: []*cli.Command{
 			{
 				Name:    "dev",
@@ -105,6 +115,18 @@ func main() {
 						Usage: "List all keys",
 						Value: false,
 					},
+					&cli.BoolFlag{
+						Name:    "unused",
+						Aliases: []string{"U"},
+						Usage:   "List un-used keys only",
+						Value:   false,
+					},
+					&cli.BoolFlag{
+						Name:    "used",
+						Aliases: []string{"u"},
+						Usage:   "List used keys only",
+						Value:   false,
+					},
 				},
 			},
 		},
@@ -122,43 +144,6 @@ func main() {
 	if err != nil {
 		fatalf("ERROR: %v", err)
 	}
-}
-
-func dev(c *cli.Context) error {
-	saveFile := c.String("file")
-	k := krypto431.New(krypto431.WithSaveFile(saveFile))
-	err := k.Load()
-	if err != nil {
-		return err
-	}
-
-	for i := range k.Keys {
-		groups, err := k.Keys[i].Groups()
-		if err != nil {
-			return err
-		}
-		fmt.Printf("%d (id: %s, used: %t, keepers: %s):\n'%s'\n\n", len(k.Keys[i].Runes), string(k.Keys[i].Id), k.Keys[i].Used, strings.Join(krypto431.RunesToStrings(&k.Keys[i].Keepers), ", "), string(*groups))
-		krypto431.Wipe(groups)
-	}
-
-	//k.NewTextMessage("Hello world", "VQ, KA", "HELLO")
-	err = k.NewTextMessage("Hej, how is it? Hello world")
-	if err != nil {
-		return err
-	}
-
-	for i := range k.Messages {
-		err := k.Messages[i].Encipher()
-		if err != nil {
-			return err
-		}
-	}
-
-	if c.Bool("save") {
-		k.Save()
-	}
-
-	return nil
 }
 
 func reinit(c *cli.Context) error {
@@ -204,6 +189,8 @@ func listKeys(c *cli.Context) error {
 	keepers := krypto431.VettedKeepers(c.StringSlice("keepers")...)
 	and := c.Bool("and")
 	all := c.Bool("all")
+	unusedOnly := c.Bool("unused")
+	usedOnly := c.Bool("used")
 
 	k := krypto431.New(krypto431.WithSaveFile(saveFile))
 	err := k.Load()
@@ -217,6 +204,11 @@ func listKeys(c *cli.Context) error {
 
 listKeysMainLoop:
 	for i := range k.Keys {
+		if unusedOnly && !usedOnly && k.Keys[i].Used {
+			continue
+		} else if !unusedOnly && usedOnly && !k.Keys[i].Used {
+			continue
+		}
 		if all {
 			kprs := anonKeyStr
 			if len(k.Keys[i].Keepers) > 0 {
@@ -299,5 +291,42 @@ func newMessage(c *cli.Context) error {
 }
 
 func receiveMessage(c *cli.Context) error {
+	return nil
+}
+
+func dev(c *cli.Context) error {
+	saveFile := c.String("file")
+	k := krypto431.New(krypto431.WithSaveFile(saveFile))
+	err := k.Load()
+	if err != nil {
+		return err
+	}
+
+	/* 	for i := range k.Keys {
+	   		groups, err := k.Keys[i].Groups()
+	   		if err != nil {
+	   			return err
+	   		}
+	   		fmt.Printf("%d (id: %s, used: %t, keepers: %s):\n'%s'\n\n", len(k.Keys[i].Runes), string(k.Keys[i].Id), k.Keys[i].Used, strings.Join(krypto431.RunesToStrings(&k.Keys[i].Keepers), ", "), string(*groups))
+	   		krypto431.Wipe(groups)
+	   	}
+	*/
+	//k.NewTextMessage("Hello world", "VQ, KA", "HELLO")
+	err = k.NewTextMessage("Hej, how is it? Hello world")
+	if err != nil {
+		return err
+	}
+
+	for i := range k.Messages {
+		err := k.Messages[i].Decipher()
+		if err != nil {
+			return err
+		}
+	}
+
+	if c.Bool("save") {
+		k.Save()
+	}
+
 	return nil
 }
