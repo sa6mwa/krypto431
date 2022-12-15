@@ -41,16 +41,16 @@ type Krypto431 interface {
 const (
 	useCrandWipe               bool   = true
 	DefaultGroupSize           int    = 5
-	DefaultKeyLength           int    = 130 // Two rows of 13 groups (5 chars) per 80 char row, 65 chars per row.
+	DefaultKeyLength           int    = 350 // 70 groups, 5 groups per row is 14 rows total
 	DefaultColumns             int    = 80
 	DefaultMakePDF             bool   = false
 	DefaultMakeTextFiles       bool   = false
 	DefaultSaveFile            string = "~/.krypto431.gob"
-	DefaultKeyCapacity         int    = 100000 // 100k keys
-	DefaultChunkCapacity       int    = 20     // 20 chunks
-	DefaultEncodedTextCapacity int    = DefaultKeyLength * 2
+	DefaultKeyCapacity         int    = 50000                                   // 50k keys
+	DefaultChunkCapacity       int    = 20                                      // 20 chunks
+	DefaultEncodedTextCapacity int    = DefaultKeyLength * 2                    // 700
 	DefaultMessageCapacity     int    = 10000                                   // 10k messages
-	DefaultPlainTextCapacity   int    = DefaultKeyLength * DefaultChunkCapacity // 2600
+	DefaultPlainTextCapacity   int    = DefaultKeyLength * DefaultChunkCapacity // 7000
 )
 
 // Instance stores generated keys, plaintext, ciphertext, callsign(s) and

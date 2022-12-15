@@ -62,10 +62,10 @@ func TrigraphByte(writeTo *byte, x *byte, y *byte) error {
 	if (*x < byte('A') || *x > byte('Z')) || (*y < byte('A') || *y > byte('Z')) {
 		return errors.New("Trigraph: input X and Y must be between A and Z")
 	}
-	// DIANA algorithm: 25 - x - y) & 26 = third letter, i.e trigraph With type
-	// byte this will produce negative numbers and since byte is an alias for
-	// uint8 (unsigned) the double modulo in order to shift sign from negative to
-	// positive will fail, thus casting them as int.
+	// DIANA algorithm: (25 - x - y) % 26 = third letter, i.e trigraph.
+	// With type byte this will produce negative numbers and since byte is an
+	// alias for uint8 (unsigned) the double modulo in order to shift sign from
+	// negative to positive will fail, thus casting them as int.
 	*writeTo = byte(int('A') + ((((25 - (int(*x) - int('A')) - (int(*y) - int('A'))) % 26) + 26) % 26))
 	return nil
 }
@@ -79,9 +79,9 @@ func TrigraphRune(writeTo *rune, x *rune, y *rune) error {
 	if (*x < 'A' || *x > 'Z') || (*y < 'A' || *y > 'Z') {
 		return errors.New("Trigraph: input X and Y must be between A and Z")
 	}
-	// DIANA algorithm: 25 - x - y) & 26 = third letter, i.e trigraph
-	// A rune is an alias for int32, signed, so that will work shifting a
-	// negative number into a positive.
+	// DIANA algorithm: (25 - x - y) % 26 = third letter, i.e trigraph.
+	// A rune is an alias for int32, signed, so that will work shifting a negative
+	// number into a positive.
 	*writeTo = rune('A') + ((((25 - (*x - rune('A')) - (*y - rune('A'))) % 26) + 26) % 26)
 	return nil
 }
