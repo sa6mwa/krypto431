@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/sa6mwa/krypto431/diana"
 )
@@ -65,17 +66,11 @@ const (
 )
 
 func isUpper(c *rune) bool {
-	if *c >= 'A' && *c <= 'Z' {
-		return true
-	}
-	return false
+	return unicode.IsUpper(*c)
 }
 
 func isLower(c *rune) bool {
-	if *c >= 'a' && *c <= 'z' {
-		return true
-	}
-	return false
+	return unicode.IsLower(*c)
 }
 
 /*
@@ -88,23 +83,11 @@ func isLetter(c rune) bool {
 */
 
 func toUpper(c *rune, b *rune) {
-	var diff rune = 'a' - 'A'
-	if *c >= 'a' && *c <= 'z' {
-		*b = *c - diff
-	} else {
-		*b = *c
-	}
-	return
+	*b = unicode.ToUpper(*c)
 }
 
 func toLower(c *rune, b *rune) {
-	var diff rune = 'a' - 'A'
-	if *c >= 'A' && *c <= 'Z' {
-		*b = *c + diff
-	} else {
-		*b = *c
-	}
-	return
+	*b = unicode.ToLower(*c)
 }
 
 type codecState struct {
@@ -133,14 +116,14 @@ func newState() *codecState {
 	}
 }
 
+/*
 func appendRune(slice *[]rune, r *rune) {
-	// capacity of the underlying array should have been setup not to cause
-	// reallocation (based on maximum message size length, by default 100 *
-	// keylength = 100*300 = 30000 characters/runes/bytes).
+	// Capacity of the underlying array should have been setup not to cause
+	// reallocation.
 	// TODO: Add warning when slice capacity is about to be reached.
 	*slice = append(*slice, *r)
 }
-
+*/
 /*
 func (state *codecState) reset(p *Message) error {
 	if p != nil {
@@ -560,10 +543,14 @@ func (t *Message) Encipher() error {
 	// with a key. The last chunk need to fill out with table changers (Z) so that
 	// the sum of the length of all chunks are divided by GroupSize without a
 	// remainder (mod % GroupSize).
-	chunks := make([]Chunk, 0, DefaultChunkCapacity)
-	chunk := NewChunk(t.instance.GroupSize)
+	chunks := make([]chunk, 0, DefaultChunkCapacity)
+	chunk := newChunk(t.instance.GroupSize)
 	// First chunk obviously uses the message key id...
-	chunk.KeyId = t.KeyId
+	keyPtr, err := t.instance.GetKey(t.KeyId)
+	if err != nil {
+		return err
+	}
+	chunk.key = keyPtr
 
 	// If something fails, we need to release all keys we have used.
 	releaseKeys := true
@@ -573,9 +560,9 @@ func (t *Message) Encipher() error {
 		if releaseKeys {
 			t.instance.MarkKeyUsed(t.KeyId, false)
 			Wipe(&t.KeyId)
-			t.instance.MarkKeyUsed(chunk.KeyId, false)
+			chunk.key.Used = false
 			for i := range chunks {
-				t.instance.MarkKeyUsed(chunks[i].KeyId, false)
+				chunks[i].key.Used = false
 				chunks[i].Wipe()
 			}
 			chunk.Wipe()
@@ -584,23 +571,23 @@ func (t *Message) Encipher() error {
 	//}(&releaseKeys)
 
 	for i := range t.PlainText {
-		if state.charCounter >= t.instance.KeyLength-t.instance.GroupSize-ControlCharactersNeededToChangeKey {
+		if state.charCounter >= chunk.key.KeyLength()-t.instance.GroupSize-ControlCharactersNeededToChangeKey {
 			keyPtr := t.instance.FindKey(t.Recipients...)
 			if keyPtr == nil {
 				return ErrOutOfKeys
 			}
-			err := state.changeKey(keyPtr, &chunk.EncodedText)
+			err := state.changeKey(keyPtr, &chunk.encodedText)
 			if err != nil {
 				return err
 			}
 			keyPtr.Used = true
 			chunks = append(chunks, chunk)
-			chunk = NewChunk(t.instance.GroupSize)
-			chunk.KeyId = keyPtr.Id
+			chunk = newChunk(t.instance.GroupSize)
+			chunk.key = keyPtr
 			state.reset()
 		}
 
-		err := state.encodeCharacter(&t.PlainText[i], &chunk.EncodedText)
+		err := state.encodeCharacter(&t.PlainText[i], &chunk.encodedText)
 		if err != nil {
 			return err
 		}
@@ -609,11 +596,11 @@ func (t *Message) Encipher() error {
 	// count length of all chunks and make sure the last chunk compensates for modulo GroupSize
 	// length of all EncodedTexts.
 	// Last chunk is current chunk...
-	lengthOfAllEncodedTexts := len(chunk.EncodedText)
+	lengthOfAllEncodedTexts := len(chunk.encodedText)
 	for i := range chunks {
-		lengthOfAllEncodedTexts += len(chunks[i].EncodedText)
+		lengthOfAllEncodedTexts += len(chunks[i].encodedText)
 	}
-	err = state.pad((t.instance.GroupSize-(lengthOfAllEncodedTexts%t.instance.GroupSize))%t.instance.GroupSize, &chunk.EncodedText)
+	err = state.pad((t.instance.GroupSize-(lengthOfAllEncodedTexts%t.instance.GroupSize))%t.instance.GroupSize, &chunk.encodedText)
 	if err != nil {
 		return err
 	}
@@ -624,22 +611,21 @@ func (t *Message) Encipher() error {
 	// encipher() each EncodedText with each chunk's key...
 	//
 	for i := range chunks {
-		keyPtr, err := t.instance.GetKey(chunks[i].KeyId)
-		if err != nil {
-			return err
+		if chunks[i].key == nil {
+			return ErrNilPointer
 		}
-		if len(chunks[i].EncodedText) > len(keyPtr.Runes) {
+		if len(chunks[i].encodedText) > chunks[i].key.KeyLength() {
 			tooShortKeyMsg := "key %s is too short to encipher chunk %d "
 			if len(chunks) > 1 {
 				tooShortKeyMsg += "out of %d chunks"
 			} else {
 				tooShortKeyMsg += "(message is only %d chunk)"
 			}
-			return fmt.Errorf(tooShortKeyMsg, string(keyPtr.Id), i+1, len(chunks))
+			return fmt.Errorf(tooShortKeyMsg, string(chunks[i].key.Id), i+1, len(chunks))
 		}
-		for ki := range chunks[i].EncodedText {
+		for ki := range chunks[i].encodedText {
 			var output rune
-			err := diana.TrigraphRune(&output, &keyPtr.Runes[ki], &chunks[i].EncodedText[ki])
+			err := diana.TrigraphRune(&output, &chunks[i].key.Runes[ki], &chunks[i].encodedText[ki])
 			if err != nil {
 				return err
 			}
@@ -648,11 +634,11 @@ func (t *Message) Encipher() error {
 	}
 
 	for i := range chunks {
-		grouped, err := groups(&chunks[i].EncodedText, t.instance.GroupSize, 0)
+		grouped, err := groups(&chunks[i].encodedText, t.instance.GroupSize, 0)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("key: %s, enctxt: %s"+LineBreak, string(chunks[i].KeyId), string(*grouped))
+		fmt.Printf("key: %s, enctxt: %s"+LineBreak, string(chunks[i].key.Id), string(*grouped))
 	}
 
 	grouped, err := groups(&t.CipherText, t.instance.GroupSize, 0)

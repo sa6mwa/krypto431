@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/sa6mwa/krypto431/crand"
 )
 
@@ -26,6 +27,12 @@ var (
 	ErrTableTooShort      = errors.New("out-of-bounds, character table is too short")
 	ErrUnsupportedTable   = errors.New("character table not supported")
 	ErrOutOfKeys          = errors.New("can not encipher multi-key message, unable to find additional key(s)")
+	ErrNoCallSign         = errors.New("need to specify your call-sign")
+	ErrNoSaveFile         = errors.New("missing file name for persisting keys, messages and settings")
+	ErrInvalidGroupSize   = errors.New("group size must be 1 or longer")
+	ErrKeyTooShort        = fmt.Errorf("key length must be %d characters or longer", MinimumSupportedKeyLength)
+	ErrTooNarrow          = fmt.Errorf("column width must be at least %d characters wide", MinimumColumnWidth)
+	ErrKeyColumnsTooShort = errors.New("key columns less than group size")
 )
 
 // Krypto431 is the interface. Each struct must have these assigned methods.
@@ -42,15 +49,16 @@ const (
 	useCrandWipe               bool   = true
 	DefaultGroupSize           int    = 5
 	DefaultKeyLength           int    = 350 // 70 groups, 5 groups per row is 14 rows total
-	DefaultColumns             int    = 80
-	DefaultMakePDF             bool   = false
-	DefaultMakeTextFiles       bool   = false
+	DefaultColumns             int    = 110
+	DefaultKeyColumns          int    = 30
 	DefaultSaveFile            string = "~/.krypto431.gob"
 	DefaultKeyCapacity         int    = 50000                                   // 50k keys
 	DefaultChunkCapacity       int    = 20                                      // 20 chunks
 	DefaultEncodedTextCapacity int    = DefaultKeyLength * 2                    // 700
 	DefaultMessageCapacity     int    = 10000                                   // 10k messages
 	DefaultPlainTextCapacity   int    = DefaultKeyLength * DefaultChunkCapacity // 7000
+	MinimumSupportedKeyLength  int    = 20
+	MinimumColumnWidth         int    = 85 // Trigraph table is 80 characters wide
 )
 
 // Instance stores generated keys, plaintext, ciphertext, callsign(s) and
@@ -59,17 +67,17 @@ const (
 // be converted to upper case. Mutex and persistance file (saveFile) are not
 // exported meaning values will not be persisted to disk.
 type Instance struct {
-	mx                       *sync.Mutex
-	saveFile                 string
-	createSaveFileIfNotExist bool
-	GroupSize                int       `json:",omitempty"`
-	KeyLength                int       `json:",omitempty"`
-	Columns                  int       `json:",omitempty"`
-	Keys                     []Key     `json:",omitempty"`
-	Messages                 []Message `json:",omitempty"`
-	MakePDF                  bool      `json:",omitempty"`
-	MakeTextFiles            bool      `json:",omitempty"`
-	MyCallSigns              *[][]rune `json:",omitempty"`
+	mx                        *sync.Mutex
+	saveFile                  string
+	overwriteSaveFileIfExists bool
+	interactive               bool
+	GroupSize                 int       `json:",omitempty"`
+	KeyLength                 int       `json:",omitempty"`
+	Columns                   int       `json:",omitempty"`
+	KeyColumns                int       `json:",omitempty"`
+	Keys                      []Key     `json:",omitempty"`
+	Messages                  []Message `json:",omitempty"`
+	MyCallSigns               [][]rune  `json:",omitempty"`
 }
 
 // Key struct holds a key. Keepers is a list of callsigns or other identifiers
@@ -99,30 +107,29 @@ type Key struct {
 // your instace's Keys slice it will be fetched from the database or fail. The
 // KeyId should be the first group in your received message.
 type Message struct {
-	GroupCount int    `json:",omitempty"`
-	KeyId      []rune `json:",omitempty"`
-	PlainText  []rune `json:",omitempty"`
-	Binary     []byte `json:",omitempty"`
-	CipherText []rune `json:",omitempty"`
-	//EncodedChunks []Chunk  `json:",omitempty"`
+	GroupCount int      `json:",omitempty"`
+	KeyId      []rune   `json:",omitempty"`
+	PlainText  []rune   `json:",omitempty"`
+	Binary     []byte   `json:",omitempty"`
+	CipherText []rune   `json:",omitempty"`
 	Recipients [][]rune `json:",omitempty"`
 	instance   *Instance
 }
 
-// A chunk is either the complete PlainText encoded or - if the message is too
-// long for the key - part of the PlainText where all but the last chunk ends in
-// a key change. Each chunk is to be enciphered with a key allowing to chain
-// multiple keys for longer messages.
-type Chunk struct {
-	EncodedText []rune `json:",omitempty"`
-	KeyId       []rune `json:",omitempty"`
+// A chunk is internal to the Encipher function and is either the complete
+// PlainText encoded or - if the message is too long for the key - part of the
+// PlainText where all but the last chunk ends in a key change. Each chunk is to
+// be enciphered with a key allowing to chain multiple keys for longer messages.
+type chunk struct {
+	encodedText []rune
+	key         *Key
 }
 
-// Returns an initialized Chunk (groupsize is usually msg.instance.GroupSize).
-func NewChunk(groupSize int) Chunk {
-	return Chunk{
-		EncodedText: make([]rune, 0, DefaultEncodedTextCapacity),
-		KeyId:       make([]rune, 0, groupSize),
+// Returns an initialized chunk (groupSize is usually msg.instance.GroupSize).
+func newChunk(groupSize int) chunk {
+	return chunk{
+		encodedText: make([]rune, 0, DefaultEncodedTextCapacity),
+		key:         nil,
 	}
 }
 
@@ -222,6 +229,11 @@ func (k *Key) ZeroWipe() error {
 	return nil
 }
 
+// KeyLength() returns the length of this key instance.
+func (k *Key) KeyLength() int {
+	return len(k.Runes)
+}
+
 // Returns a rune slice where each group is separated by a space. If columns is
 // above 0 the function will insert a line break instead of a space before
 // extending beyond that column length. Don't forget to Wipe(myRuneSlice) when
@@ -274,7 +286,7 @@ func (t *Message) Groups() (*[]rune, error) {
 // Instance.Columns (or defaultColumns). Don't forget to Wipe(b []rune) this
 // slice when you are done!
 func (k *Key) GroupsBlock() (*[]rune, error) {
-	return groups(&k.Runes, k.instance.GroupSize, k.instance.Columns)
+	return groups(&k.Runes, k.instance.GroupSize, k.instance.KeyColumns)
 }
 
 // GroupsBlock for Message
@@ -358,7 +370,7 @@ func (t *Message) ZeroWipe() {
 }
 
 // Wipe overwrites a chunk with either random runes or zeroes.
-func (c *Chunk) Wipe() error {
+func (c *chunk) Wipe() error {
 	if useCrandWipe {
 		err := c.RandomWipe()
 		if err != nil {
@@ -374,8 +386,9 @@ func (c *Chunk) Wipe() error {
 }
 
 // Chunk RandomWipe overwrites chunk with random runes.
-func (c *Chunk) RandomWipe() error {
-	runeSlices := []*[]rune{&c.EncodedText, &c.KeyId}
+func (c *chunk) RandomWipe() error {
+	c.key = nil
+	runeSlices := []*[]rune{&c.encodedText}
 	for i := range runeSlices {
 		written, err := crand.ReadRunes(*runeSlices[i])
 		if err != nil || written != len(*runeSlices[i]) {
@@ -394,30 +407,27 @@ func (c *Chunk) RandomWipe() error {
 }
 
 // Chunk ZeroWipe zeroes a chunk
-func (c *Chunk) ZeroWipe() error {
-	for i := 0; i < len(c.EncodedText); i++ {
-		c.EncodedText[i] = 0
+func (c *chunk) ZeroWipe() error {
+	for i := 0; i < len(c.encodedText); i++ {
+		c.encodedText[i] = 0
 	}
-	c.EncodedText = nil
-	for i := 0; i < len(c.KeyId); i++ {
-		c.KeyId[i] = 0
-	}
-	c.KeyId = nil
+	c.encodedText = nil
+	c.key = nil
 	return nil
 }
 
 // New creates a new Instance construct
 func New(opts ...Option) Instance {
 	i := Instance{
-		saveFile:                 DefaultSaveFile,
-		createSaveFileIfNotExist: false,
-		GroupSize:                DefaultGroupSize,
-		KeyLength:                DefaultKeyLength,
-		Columns:                  DefaultColumns,
-		MakePDF:                  DefaultMakePDF,
-		MakeTextFiles:            DefaultMakeTextFiles,
-		Keys:                     make([]Key, 0, DefaultKeyCapacity),
-		Messages:                 make([]Message, 0, DefaultMessageCapacity),
+		saveFile:                  DefaultSaveFile,
+		overwriteSaveFileIfExists: false,
+		interactive:               false,
+		GroupSize:                 DefaultGroupSize,
+		KeyLength:                 DefaultKeyLength,
+		Columns:                   DefaultColumns,
+		KeyColumns:                DefaultKeyColumns,
+		Keys:                      make([]Key, 0, DefaultKeyCapacity),
+		Messages:                  make([]Message, 0, DefaultMessageCapacity),
 	}
 	for _, opt := range opts {
 		opt(&i)
@@ -425,25 +435,22 @@ func New(opts ...Option) Instance {
 	if i.mx == nil {
 		i.mx = &sync.Mutex{}
 	}
-	if i.MyCallSigns == nil {
-		// KA = Kilo Alpha = Kalle Anka = Donald Duck
-		defaultCallSigns := [][]rune{[]rune("KA")}
-		i.MyCallSigns = &defaultCallSigns
-	}
 	return i
 }
 
 // Option fn type for the New() and Load() constructs.
 type Option func(r *Instance)
 
-func WithCallSign(cs *[]rune) Option {
+func WithCallSign(cs string) Option {
 	return func(r *Instance) {
-		*r.MyCallSigns = append(*r.MyCallSigns, *cs)
+		r.MyCallSigns = append(r.MyCallSigns, []rune(cs))
 	}
 }
-func WithCallSigns(css *[][]rune) Option {
+func WithCallSigns(css ...string) Option {
 	return func(r *Instance) {
-		r.MyCallSigns = css
+		for i := range css {
+			r.MyCallSigns = append(r.MyCallSigns, []rune(css[i]))
+		}
 	}
 }
 func WithMutex(mu *sync.Mutex) Option {
@@ -466,26 +473,24 @@ func WithColumns(n int) Option {
 		r.Columns = n
 	}
 }
-func WithMakePDF(b bool) Option {
+func WithKeyColumns(n int) Option {
 	return func(r *Instance) {
-		r.MakePDF = b
+		r.KeyColumns = n
 	}
 }
-func WithMakeTextFiles(b bool) Option {
-	return func(r *Instance) {
-		r.MakeTextFiles = b
-	}
-}
-
 func WithSaveFile(savefile string) Option {
 	return func(r *Instance) {
 		r.saveFile = savefile
 	}
 }
-
-func WithCreateSaveFileIfNotExist() Option {
+func WithOverwriteSaveFileIfExists(b bool) Option {
 	return func(r *Instance) {
-		r.createSaveFileIfNotExist = true
+		r.overwriteSaveFileIfExists = b
+	}
+}
+func WithInteractive(b bool) Option {
+	return func(r *Instance) {
+		r.interactive = b
 	}
 }
 
@@ -517,6 +522,27 @@ loop:
 
 // Methods assigned to the main struct, start of API...
 
+// Asserts that settings in the instance are valid. Function is intended to be
+// executed after New() to assert that settings are valid.
+func (r *Instance) Assert() error {
+	if len(r.saveFile) == 0 {
+		return ErrNoSaveFile
+	}
+	if r.GroupSize < 1 {
+		return ErrInvalidGroupSize
+	}
+	if r.KeyLength < MinimumSupportedKeyLength {
+		return ErrKeyTooShort
+	}
+	if r.Columns < MinimumColumnWidth {
+		return ErrTooNarrow
+	}
+	if r.KeyColumns < r.GroupSize {
+		return ErrKeyColumnsTooShort
+	}
+	return nil
+}
+
 // Close is an alias for Instance.Wipe()
 func (r *Instance) Close() {
 	r.Wipe()
@@ -540,10 +566,10 @@ func (r *Instance) Wipe() {
 	r.Messages = nil
 }
 
-// TODO: Try https://github.com/nknorg/encrypted-stream for encrypting file before gzip...
+// TODO: Try https://github.com/nknorg/encrypted-stream for encrypting file before (after?) gzip...
 func (r *Instance) Save() error {
 	if len(r.saveFile) == 0 {
-		return fmt.Errorf("can not save: missing file name for persisting keys, messages and settings")
+		return ErrNoSaveFile
 	}
 	// If save file starts with a tilde, resolve it to the user's home directory.
 	if strings.HasPrefix(r.saveFile, "~/") {
@@ -552,6 +578,29 @@ func (r *Instance) Save() error {
 			return err
 		}
 		r.saveFile = filepath.Join(dirname, r.saveFile[2:])
+	}
+	_, err := os.Stat(r.saveFile)
+	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			// Other error than file not found...
+			return err
+		}
+	} else {
+		// saveFile already exists
+		if !r.overwriteSaveFileIfExists {
+			if r.interactive {
+				overwrite := false
+				prompt := &survey.Confirm{
+					Message: fmt.Sprintf("Overwrite %s?", r.saveFile),
+				}
+				survey.AskOne(prompt, &overwrite)
+				if !overwrite {
+					return nil
+				}
+			} else {
+				return fmt.Errorf("save file %s already exist (will not overwrite)", r.saveFile)
+			}
+		}
 	}
 	// Create save file if it does not exist or truncate it if it does exist.
 	f, err := os.OpenFile(r.saveFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
@@ -572,7 +621,7 @@ func (r *Instance) Save() error {
 
 func (r *Instance) Load() error {
 	if len(r.saveFile) == 0 {
-		return fmt.Errorf("missing file name for persisting keys, messages and settings")
+		return ErrNoSaveFile
 	}
 	// If save file starts with a tilde, resolve it to the user's home directory.
 	if strings.HasPrefix(r.saveFile, "~/") {
@@ -586,11 +635,8 @@ func (r *Instance) Load() error {
 	var f *os.File
 	_, err := os.Stat(r.saveFile)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) && r.createSaveFileIfNotExist {
-			err = r.Save()
-			if err != nil {
-				return err
-			}
+		if errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("persistance file %s does not exist, please initialize it to continue", r.saveFile)
 		} else {
 			return err
 		}
@@ -618,6 +664,8 @@ func (r *Instance) Load() error {
 		for i := range r.Messages {
 			r.Messages[i].instance = r
 		}
+		// Allow overwriting file after it's been loaded...
+		r.overwriteSaveFileIfExists = true
 	}
 	return nil
 }
