@@ -15,34 +15,8 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/sa6mwa/krypto431/crand"
+	"github.com/sa6mwa/krypto431/pkg/dtg"
 )
-
-var (
-	ErrNilPointer         = errors.New("received a nil pointer")
-	ErrNoCipherText       = errors.New("message cipher text is too short to decipher")
-	ErrNoKey              = errors.New("message has an invalid or no key")
-	ErrKeyNotFound        = errors.New("key not found")
-	ErrInvalidCoding      = errors.New("invalid character in encoded text (must be between A-Z)")
-	ErrInvalidControlChar = errors.New("invalid control character")
-	ErrTableTooShort      = errors.New("out-of-bounds, character table is too short")
-	ErrUnsupportedTable   = errors.New("character table not supported")
-	ErrOutOfKeys          = errors.New("can not encipher multi-key message, unable to find additional key(s)")
-	ErrNoCallSign         = errors.New("need to specify your call-sign")
-	ErrNoSaveFile         = errors.New("missing file name for persisting keys, messages and settings")
-	ErrInvalidGroupSize   = errors.New("group size must be 1 or longer")
-	ErrKeyTooShort        = fmt.Errorf("key length must be %d characters or longer", MinimumSupportedKeyLength)
-	ErrTooNarrow          = fmt.Errorf("column width must be at least %d characters wide", MinimumColumnWidth)
-	ErrKeyColumnsTooShort = errors.New("key columns less than group size")
-)
-
-// Krypto431 is the interface. Each struct must have these assigned methods.
-type Krypto431 interface {
-	Wipe()
-	RandomWipe()
-	ZeroWipe()
-	Groups()
-	GroupsBlock()
-}
 
 // defaults, most are exported
 const (
@@ -60,6 +34,34 @@ const (
 	MinimumSupportedKeyLength  int    = 20
 	MinimumColumnWidth         int    = 85 // Trigraph table is 80 characters wide
 )
+
+var (
+	ErrNilPointer         = errors.New("received a nil pointer")
+	ErrNoCipherText       = errors.New("message cipher text is too short to decipher")
+	ErrNoKey              = errors.New("message has an invalid or no key")
+	ErrKeyNotFound        = errors.New("key not found")
+	ErrInvalidCoding      = errors.New("invalid character in encoded text (must be between A-Z)")
+	ErrInvalidControlChar = errors.New("invalid control character")
+	ErrTableTooShort      = errors.New("out-of-bounds, character table is too short")
+	ErrUnsupportedTable   = errors.New("character table not supported")
+	ErrOutOfKeys          = errors.New("can not encipher multi-key message, unable to find additional key(s)")
+	ErrNoCallSign         = errors.New("need to specify your call-sign")
+	ErrNoSaveFile         = errors.New("missing file name for persisting keys, messages and settings")
+	ErrInvalidGroupSize   = errors.New("group size must be 1 or longer")
+	ErrKeyTooShort        = fmt.Errorf("key length must be %d characters or longer", MinimumSupportedKeyLength)
+	ErrTooNarrow          = fmt.Errorf("column width must be at least %d characters wide", MinimumColumnWidth)
+	ErrKeyColumnsTooShort = errors.New("key column width less than group size")
+)
+
+// Krypto431 interface (for Keys and Messages). Not used internally in
+// package as there is an instance struct.
+type Krypto431 interface {
+	Wipe() error
+	RandomWipe() error
+	ZeroWipe() error
+	Groups() (*[]rune, error)
+	GroupsBlock() (*[]rune, error)
+}
 
 // Instance stores generated keys, plaintext, ciphertext, callsign(s) and
 // configuration items. It is mandatory to populate MyCallSigns with at least
@@ -89,7 +91,9 @@ type Key struct {
 	Id       []rune   `json:",omitempty"`
 	Runes    []rune   `json:",omitempty"`
 	Keepers  [][]rune `json:",omitempty"`
-	Used     bool     `json:",omitempty"`
+	Expires  dtg.DTG
+	Created  dtg.DTG
+	Used     bool `json:",omitempty"`
 	instance *Instance
 }
 
