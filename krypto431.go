@@ -14,8 +14,8 @@ import (
 	"sync"
 
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/sa6mwa/dtg"
 	"github.com/sa6mwa/krypto431/crand"
-	"github.com/sa6mwa/krypto431/pkg/dtg"
 )
 
 // defaults, most are exported
@@ -111,6 +111,7 @@ type Key struct {
 // your instace's Keys slice it will be fetched from the database or fail. The
 // KeyId should be the first group in your received message.
 type Message struct {
+	DTG        dtg.DTG
 	GroupCount int      `json:",omitempty"`
 	KeyId      []rune   `json:",omitempty"`
 	PlainText  []rune   `json:",omitempty"`

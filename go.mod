@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.6
+	github.com/sa6mwa/dtg v0.1.0
 	github.com/seehuhn/mt19937 v1.0.0
 	github.com/stretchr/testify v1.8.1
 	github.com/urfave/cli/v2 v2.23.6
