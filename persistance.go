@@ -1,6 +1,7 @@
 package krypto431
 
 import (
+	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/gob"
@@ -22,6 +23,7 @@ import (
 
 const (
 	passwordPrompt       string = "Enter encryption key: "
+	repeatPasswordPrompt string = passwordPrompt + "(repeat) "
 	errUnableToDeriveKey string = "unable to derive key from password: "
 	errUnableToSave      string = "unable to save instance: "
 	errUnableToLoad      string = "unable to load instance: "
@@ -31,7 +33,7 @@ var (
 	ErrNoSalt           = errors.New(errUnableToDeriveKey + "krypto431 instance is missing salt")
 	ErrTooShortSalt     = errors.New(errUnableToDeriveKey + "instance salt is too short")
 	ErrPasswordTooShort = fmt.Errorf(errUnableToDeriveKey+"password too short, must be at least %d characters long", MinimumPasswordLength)
-	ErrNilKey           = errors.New(errUnableToSave + "instance is missing key needed to encrypt the save file")
+	ErrNilKey           = errors.New("instance is missing key needed to encrypt or decrypt the save file")
 	ErrPasswordInput    = errors.New("password input error")
 )
 
@@ -83,7 +85,7 @@ func AskForPassword(prompt string, minimumLength int) *[]byte {
 	defer signal.Stop(ch)
 	var pw []byte
 	for {
-		fmt.Fprint(os.Stderr, prompt+": ")
+		fmt.Fprint(os.Stderr, prompt)
 		pw, err = term.ReadPassword(int(syscall.Stdin))
 		if err != nil {
 			return nil
@@ -144,11 +146,26 @@ func (k *Krypto431) Save() error {
 	// Ask for password if instance key is empty.
 	if k.saveFileKey == nil {
 		if k.interactive {
-			pwd := AskForPassword(passwordPrompt, MinimumPasswordLength)
-			if pwd == nil {
-				return fmt.Errorf(errUnableToSave+"%w", ErrPasswordInput)
+			var pwd1 *[]byte
+			var pwd2 *[]byte
+			for {
+				pwd1 = AskForPassword(passwordPrompt, MinimumPasswordLength)
+				if pwd1 == nil {
+					return fmt.Errorf(errUnableToLoad+"%w", ErrPasswordInput)
+				}
+				pwd2 = AskForPassword(repeatPasswordPrompt, 0)
+				if pwd2 == nil {
+					return fmt.Errorf(errUnableToLoad+"%w", ErrPasswordInput)
+				}
+				if bytes.Compare(*pwd1, *pwd2) == 0 {
+					WipeBytes(pwd2)
+					break
+				}
+				WipeBytes(pwd1)
+				WipeBytes(pwd2)
+				fmt.Println("Sorry, the keys you entered did not match, try again.")
 			}
-			err := k.DeriveKeyFromPassword(pwd)
+			err := k.DeriveKeyFromPassword(pwd1)
 			if err != nil {
 				return fmt.Errorf(errUnableToSave+"key derivation failure: %w", err)
 			}
@@ -213,7 +230,7 @@ func (k *Krypto431) Load() error {
 			}
 			err := k.DeriveKeyFromPassword(pwd)
 			if err != nil {
-				return fmt.Errorf(errUnableToLoad+"key derivation failure: %w", err)
+				return fmt.Errorf(errUnableToLoad+"%w", err)
 			}
 		} else {
 			return ErrNilKey
@@ -245,7 +262,7 @@ func (k *Krypto431) Load() error {
 	if err != nil {
 		return err
 	}
-	// Fix all unexported instance fields in keys and messages
+	// Fix all non-exported instance fields in keys and messages...
 	for i := range k.Keys {
 		k.Keys[i].instance = k
 	}
@@ -254,6 +271,5 @@ func (k *Krypto431) Load() error {
 	}
 	// Allow overwriting file after it's been loaded...
 	k.overwriteSaveFileIfExists = true
-
 	return nil
 }

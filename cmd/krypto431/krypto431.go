@@ -34,10 +34,12 @@ type options struct {
 	keyColumns   int
 	columns      int
 	listItems    bool
-	exportItems  bool
-	importItems  bool
+	exportItems  string
+	importItems  string
 	deleteItems  bool
 	all          bool
+	used         bool
+	unused       bool
 	yes          bool
 }
 
@@ -56,6 +58,8 @@ const (
 	osImport       string = "import"
 	osDelete       string = "delete"
 	osAll          string = "all"
+	osUsed         string = "used"
+	osUnused       string = "unused"
 	osYes          string = "yes"
 )
 
@@ -153,6 +157,28 @@ func main() {
 				Usage:  "List, generate, export, import or delete key(s)",
 				Action: generateKeys,
 				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:    osList,
+						Aliases: []string{"l"},
+						Value:   false,
+						Usage:   "List keys (filter on keepers and used/unused)",
+					},
+					&cli.BoolFlag{
+						Name:    osDelete,
+						Aliases: []string{"d"},
+						Value:   false,
+						Usage:   "Delete keys (interactive)",
+					},
+					&cli.StringFlag{
+						Name:    osImport,
+						Aliases: []string{"i"},
+						Usage:   "Import keys from file",
+					},
+					&cli.StringFlag{
+						Name:    osExport,
+						Aliases: []string{"e"},
+						Usage:   "Export keys from main file to new file",
+					},
 
 					&cli.IntFlag{
 						Name:    osNumberOfKeys,
@@ -400,12 +426,14 @@ func keys(c *cli.Context) error {
 	o := &options{
 		saveFile:     c.String(osFile),
 		listItems:    c.Bool(osList),
-		exportItems:  c.Bool(osExport),
-		importItems:  c.Bool(osImport),
+		exportItems:  c.String(osExport),
+		importItems:  c.String(osImport),
 		deleteItems:  c.Bool(osDelete),
 		numberOfKeys: c.Int(osNumberOfKeys),
 		keepers:      c.StringSlice(osKeepers),
 		all:          c.Bool(osAll),
+		used:         c.Bool(osUsed),
+		unused:       c.Bool(osUnused),
 		yes:          c.Bool(osYes),
 	}
 
@@ -455,7 +483,7 @@ func listKeys(c *cli.Context) error {
 	unusedOnly := c.Bool("unused")
 	usedOnly := c.Bool("used")
 
-	k := krypto431.New(krypto431.WithSaveFile(saveFile))
+	k := krypto431.New(krypto431.WithSaveFile(saveFile), krypto431.WithInteractive(true))
 	err := k.Load()
 	if err != nil {
 		return err

@@ -477,7 +477,7 @@ func (c *chunk) ZeroWipe() error {
 
 // New creates a new Krypto431 instance.
 func New(opts ...Option) Krypto431 {
-	i := Krypto431{
+	instance := Krypto431{
 		saveFile:                  DefaultSaveFile,
 		saveFileKey:               nil,
 		overwriteSaveFileIfExists: false,
@@ -493,30 +493,30 @@ func New(opts ...Option) Krypto431 {
 	if err != nil {
 		salt = nil
 	} else {
-		i.salt = &salt
+		instance.salt = &salt
 	}
 	for _, opt := range opts {
-		opt(&i)
+		opt(&instance)
 	}
-	if i.mx == nil {
-		i.mx = &sync.Mutex{}
+	if instance.mx == nil {
+		instance.mx = &sync.Mutex{}
 	}
-	return i
+	return instance
 }
 
-// Option fn type for the New() and Load() constructs.
+// Option fn type for the New() construct.
 type Option func(r *Krypto431)
 
 // WithKey overrides deriving the encryption key for the save file from a
 // password by using the key directly. Must be 32 bytes long.
 func WithKey(key *[]byte) Option {
 	if key == nil || len(*key) != 32 {
-		return func(r *Krypto431) {
-			r.saveFileKey = nil
+		return func(k *Krypto431) {
+			k.saveFileKey = nil
 		}
 	}
-	return func(r *Krypto431) {
-		r.saveFileKey = key
+	return func(k *Krypto431) {
+		k.saveFileKey = key
 	}
 }
 
@@ -615,32 +615,32 @@ loop:
 	return true
 }
 
-// Methods assigned to the main struct, start of API...
+// Methods assigned to the main struct...
 
 // Asserts that settings in the instance are valid. Function is intended to be
 // executed after New() to assert that settings are valid.
-func (r *Krypto431) Assert() error {
-	if len(r.saveFile) == 0 {
+func (k *Krypto431) Assert() error {
+	if len(k.saveFile) == 0 {
 		return ErrNoSaveFile
 	}
-	if r.GroupSize < 1 {
+	if k.GroupSize < 1 {
 		return ErrInvalidGroupSize
 	}
-	if r.KeyLength < MinimumSupportedKeyLength {
+	if k.KeyLength < MinimumSupportedKeyLength {
 		return ErrKeyTooShort
 	}
-	if r.Columns < MinimumColumnWidth {
+	if k.Columns < MinimumColumnWidth {
 		return ErrTooNarrow
 	}
-	if r.KeyColumns < r.GroupSize {
+	if k.KeyColumns < k.GroupSize {
 		return ErrKeyColumnsTooShort
 	}
 	return nil
 }
 
 // Close is an alias for Krypto431.Wipe()
-func (r *Krypto431) Close() {
-	r.Wipe()
+func (k *Krypto431) Close() {
+	k.Wipe()
 }
 
 // Wipe instance assigned method wipes all in-memory keys and texts (plaintext
@@ -650,22 +650,26 @@ func (r *Krypto431) Close() {
 // respectively, but it is up to the user of the API to call Wipe() or Close()
 // when using the methods to read keys and ciphertext from database, file or
 // stdin when done processing them.
-func (r *Krypto431) Wipe() {
-	for i := range r.Keys {
-		r.Keys[i].Wipe()
+func (k *Krypto431) Wipe() {
+	for i := range k.Keys {
+		k.Keys[i].Wipe()
 	}
-	r.Keys = nil
-	for i := range r.Messages {
-		r.Messages[i].Wipe()
+	k.Keys = nil
+	for i := range k.Messages {
+		k.Messages[i].Wipe()
 	}
-	r.Messages = nil
+	k.Messages = nil
+	// wipe saveFileKey
+	WipeBytes(k.saveFileKey)
+	// wipe salt
+	WipeBytes(k.salt)
 }
 
 // NewTextMessage() is a variadic function where first argument is the message,
 // second is a comma-separated list with recipients, third a key id to override
 // the key finder function and use a specific key (not marked "used"). First
 // argument is mandatory, rest are optional.
-func (r *Krypto431) NewTextMessage(msg ...string) (err error) {
+func (k *Krypto431) NewTextMessage(msg ...string) (err error) {
 	// 1st arg = message as a utf8 string (mandatory)
 	// 2nd arg = recipients as a comma-separated list (optional)
 	// 3rd arg = key id, overrides the key finder function (optional)
@@ -676,7 +680,7 @@ func (r *Krypto431) NewTextMessage(msg ...string) (err error) {
 
 	message := Message{
 		PlainText: []rune(strings.TrimSpace(msg[0])),
-		instance:  r,
+		instance:  k,
 	}
 
 	if len(message.PlainText) < 1 {
@@ -692,8 +696,8 @@ func (r *Krypto431) NewTextMessage(msg ...string) (err error) {
 
 	if len(msg) >= 3 {
 		message.KeyId = []rune(strings.ToUpper(strings.TrimSpace(msg[2])))
-		if len(message.KeyId) != r.GroupSize {
-			return fmt.Errorf("key id \"%s\" must be %d characters long (the configured group size)", string(message.KeyId), r.GroupSize)
+		if len(message.KeyId) != k.GroupSize {
+			return fmt.Errorf("key id \"%s\" must be %d characters long (the configured group size)", string(message.KeyId), k.GroupSize)
 		}
 	}
 
@@ -707,7 +711,7 @@ func (r *Krypto431) NewTextMessage(msg ...string) (err error) {
 	if err != nil {
 		return err
 	}
-	r.Messages = append(r.Messages, message)
+	k.Messages = append(k.Messages, message)
 	return nil
 }
 
