@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/sa6mwa/krypto431"
@@ -21,6 +22,42 @@ func fatalf(format string, a ...any) {
 	fmt.Fprintf(os.Stderr, format, a...)
 	os.Exit(1)
 }
+
+type options struct {
+	saveFile     string
+	save         bool
+	call         string
+	numberOfKeys int
+	keepers      []string
+	keyLength    int
+	groupSize    int
+	keyColumns   int
+	columns      int
+	listItems    bool
+	exportItems  bool
+	importItems  bool
+	deleteItems  bool
+	all          bool
+	yes          bool
+}
+
+const (
+	osFile         string = "file"
+	osSave         string = "save"
+	osCall         string = "call"
+	osNumberOfKeys string = "keys"
+	osKeepers      string = "keepers"
+	osKeyLength    string = "keylength"
+	osGroupSize    string = "groupsize"
+	osKeyColumns   string = "keycolumns"
+	osColumns      string = "columns"
+	osList         string = "list"
+	osExport       string = "export"
+	osImport       string = "import"
+	osDelete       string = "delete"
+	osAll          string = "all"
+	osYes          string = "yes"
+)
 
 func main() {
 	app := &cli.App{
@@ -47,7 +84,7 @@ func main() {
 				Action:  dev,
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
-						Name:    "save",
+						Name:    osSave,
 						Aliases: []string{"s"},
 						Value:   false,
 						Usage:   "Persist changes to save-file",
@@ -60,46 +97,46 @@ func main() {
 				Action: initialize,
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
-						Name:    "yes",
+						Name:    osYes,
 						Aliases: []string{"y"},
 						Value:   false,
 						Usage:   "If storage file exists, overwrite without asking",
 					},
 					&cli.StringFlag{
-						Name:    "call",
+						Name:    osCall,
 						Aliases: []string{"c"},
 						Usage:   "My call-sign",
 					},
 					&cli.IntFlag{
-						Name:    "keys",
+						Name:    osNumberOfKeys,
 						Aliases: []string{"n"},
 						Value:   0,
 						Usage:   "Initial keys to generate",
 					},
 					&cli.StringSliceFlag{
-						Name:    "keepers",
+						Name:    osKeepers,
 						Aliases: []string{"k"},
 						Usage:   "Call-sign(s) that keep these keys (omit for anonymous keys)",
 					},
 					&cli.IntFlag{
-						Name:    "keylength",
+						Name:    osKeyLength,
 						Aliases: []string{"l"},
 						Value:   krypto431.DefaultKeyLength,
 						Usage:   "Length of each key",
 					},
 					&cli.IntFlag{
-						Name:    "groupsize",
+						Name:    osGroupSize,
 						Aliases: []string{"g"},
 						Value:   krypto431.DefaultGroupSize,
 						Usage:   "Number of characters per group",
 					},
 					&cli.IntFlag{
-						Name:  "keycolumns",
+						Name:  osKeyColumns,
 						Usage: "Width of key in print-out",
 						Value: krypto431.DefaultKeyColumns,
 					},
 					&cli.IntFlag{
-						Name:  "columns",
+						Name:  osColumns,
 						Usage: "Total width of print-out",
 						Value: krypto431.DefaultColumns,
 						Action: func(ctx *cli.Context, v int) error {
@@ -112,23 +149,24 @@ func main() {
 				},
 			},
 			{
-				Name:   "genkey",
-				Usage:  "Generate key(s)",
+				Name:   "keys",
+				Usage:  "List, generate, export, import or delete key(s)",
 				Action: generateKeys,
 				Flags: []cli.Flag{
+
 					&cli.IntFlag{
-						Name:    "keys",
+						Name:    osNumberOfKeys,
 						Aliases: []string{"n"},
 						Value:   1,
 						Usage:   "Number of keys to generate",
 					},
 					&cli.StringSliceFlag{
-						Name:    "keepers",
+						Name:    osKeepers,
 						Aliases: []string{"k"},
 						Usage:   "Call-signs to distribute these keys to (keepers of the keys)",
 					},
 					&cli.BoolFlag{
-						Name:    "save",
+						Name:    osSave,
 						Aliases: []string{"s"},
 						Value:   true,
 						Usage:   "Persist key(s) to save-file",
@@ -188,34 +226,36 @@ func main() {
 }
 
 func initialize(c *cli.Context) error {
-	saveFile := c.String("file")
-	yesOption := c.Bool("yes")
-	call := c.String("call")
-	numberOfKeys := c.Int("keys")
-	keepers := c.StringSlice("keepers")
-	keyLength := c.Int("keylength")
-	groupSize := c.Int("groupsize")
-	keyColumns := c.Int("keycolumns")
-	columns := c.Int("columns")
+	o := &options{
+		saveFile:     c.String(osFile),
+		yes:          c.Bool(osYes),
+		call:         c.String(osCall),
+		numberOfKeys: c.Int(osNumberOfKeys),
+		keepers:      c.StringSlice(osKeepers),
+		keyLength:    c.Int(osKeyLength),
+		groupSize:    c.Int(osGroupSize),
+		keyColumns:   c.Int(osKeyColumns),
+		columns:      c.Int(osColumns),
+	}
 
-	if !c.IsSet("call") {
+	if !c.IsSet(osCall) {
 		// Required option, ask for call-sign using go-survey if -y is not set...
-		if yesOption {
+		if o.yes {
 			return krypto431.ErrNoCallSign
 		}
 		prompt := &survey.Input{
 			Message: "Enter your call-sign:",
 		}
-		survey.AskOne(prompt, &call, survey.WithValidator(survey.Required))
-		call = strings.ToUpper(strings.TrimSpace(call))
-		if len(call) == 0 {
+		survey.AskOne(prompt, &o.call, survey.WithValidator(survey.Required))
+		o.call = strings.ToUpper(strings.TrimSpace(o.call))
+		if utf8.RuneCountInString(o.call) == 0 {
 			return krypto431.ErrNoCallSign
 		}
 	} else {
-		call = strings.ToUpper(strings.TrimSpace(call))
+		o.call = strings.ToUpper(strings.TrimSpace(o.call))
 	}
 
-	flags := []string{"yes", "call", "keys", "keepers", "keylength", "groupsize"}
+	flags := []string{osYes, osCall, osNumberOfKeys, osKeepers, osKeyLength, osGroupSize}
 	goInteractive := true
 	for i := range flags {
 		if c.IsSet(flags[i]) {
@@ -236,7 +276,7 @@ func initialize(c *cli.Context) error {
 				Name: "keys",
 				Prompt: &survey.Input{
 					Message: "Enter number of initial keys to generate:",
-					Default: fmt.Sprintf("%d", numberOfKeys),
+					Default: fmt.Sprintf("%d", o.numberOfKeys),
 				},
 				Validate: func(val interface{}) error {
 					str, ok := val.(string)
@@ -265,7 +305,7 @@ func initialize(c *cli.Context) error {
 				Prompt: &survey.Input{
 					Message: "Choose length of key:",
 					Help:    fmt.Sprintf("Default key length of %d is recommended", krypto431.DefaultKeyLength),
-					Default: fmt.Sprintf("%d", keyLength),
+					Default: fmt.Sprintf("%d", o.keyLength),
 				},
 				Validate: func(val interface{}) error {
 					str, ok := val.(string)
@@ -287,7 +327,7 @@ func initialize(c *cli.Context) error {
 				Prompt: &survey.Input{
 					Message: "Choose group size:",
 					Help:    fmt.Sprintf("Keys and messages are separated into groups, %d is the default", krypto431.DefaultGroupSize),
-					Default: fmt.Sprintf("%d", groupSize),
+					Default: fmt.Sprintf("%d", o.groupSize),
 				},
 				Validate: func(val interface{}) error {
 					str, ok := val.(string)
@@ -309,30 +349,30 @@ func initialize(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		numberOfKeys = answers.NumberOfKeys
+		o.numberOfKeys = answers.NumberOfKeys
 		ik := strings.Split(answers.Keepers, ",")
 		for i := range ik {
 			tk := strings.Split(strings.TrimSpace(ik[i]), " ")
 			for t := range tk {
 				fk := strings.ToUpper(strings.TrimSpace(tk[t]))
 				if len(fk) > 0 {
-					keepers = append(keepers, fk)
+					o.keepers = append(o.keepers, fk)
 				}
 			}
 		}
 		ik = nil
-		keyLength = answers.KeyLength
-		groupSize = answers.GroupSize
+		o.keyLength = answers.KeyLength
+		o.groupSize = answers.GroupSize
 	}
 
-	k := krypto431.New(krypto431.WithSaveFile(saveFile),
+	k := krypto431.New(krypto431.WithSaveFile(o.saveFile),
 		krypto431.WithInteractive(true),
-		krypto431.WithKeyLength(keyLength),
-		krypto431.WithGroupSize(groupSize),
-		krypto431.WithKeyColumns(keyColumns),
-		krypto431.WithColumns(columns),
-		krypto431.WithCallSign(call),
-		krypto431.WithOverwriteSaveFileIfExists(yesOption),
+		krypto431.WithKeyLength(o.keyLength),
+		krypto431.WithGroupSize(o.groupSize),
+		krypto431.WithKeyColumns(o.keyColumns),
+		krypto431.WithColumns(o.columns),
+		krypto431.WithCallSign(o.call),
+		krypto431.WithOverwriteSaveFileIfExists(o.yes),
 	)
 
 	err := k.Assert()
@@ -340,8 +380,11 @@ func initialize(c *cli.Context) error {
 		return err
 	}
 
-	if numberOfKeys > 0 {
-		err := k.GenerateKeys(numberOfKeys, keepers...)
+	if o.numberOfKeys > 0 {
+		if o.numberOfKeys > 5000 {
+			fmt.Printf("Generating %d keys", o.numberOfKeys)
+		}
+		err := k.GenerateKeys(o.numberOfKeys, o.keepers...)
 		if err != nil {
 			return err
 		}
@@ -350,6 +393,36 @@ func initialize(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func keys(c *cli.Context) error {
+	o := &options{
+		saveFile:     c.String(osFile),
+		listItems:    c.Bool(osList),
+		exportItems:  c.Bool(osExport),
+		importItems:  c.Bool(osImport),
+		deleteItems:  c.Bool(osDelete),
+		numberOfKeys: c.Int(osNumberOfKeys),
+		keepers:      c.StringSlice(osKeepers),
+		all:          c.Bool(osAll),
+		yes:          c.Bool(osYes),
+	}
+
+	k := krypto431.New(krypto431.WithSaveFile(o.saveFile))
+	err := k.Load()
+	if err != nil {
+		return err
+	}
+
+	// list keys is a singleton, exit after listing
+
+	// delete keys
+
+	// import keys
+
+	// export keys
+
 	return nil
 }
 

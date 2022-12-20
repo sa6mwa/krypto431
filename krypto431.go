@@ -1,19 +1,14 @@
 package krypto431
 
 import (
-	"compress/gzip"
-	"encoding/gob"
+	"encoding/hex"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log"
 	"math"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 
-	"github.com/AlecAivazis/survey/v2"
 	"github.com/sa6mwa/dtg"
 	"github.com/sa6mwa/krypto431/crand"
 )
@@ -33,6 +28,12 @@ const (
 	DefaultPlainTextCapacity   int    = DefaultKeyLength * DefaultChunkCapacity // 7000
 	MinimumSupportedKeyLength  int    = 20
 	MinimumColumnWidth         int    = 85 // Trigraph table is 80 characters wide
+	MinimumSaltLength          int    = 32
+	MinimumPasswordLength      int    = 8
+	// Fixed salt for pbkdf2 derived keys. Can be changed using
+	// krypto431.New(krypto431.WithSalt(atLeast32characterSaltString)) when
+	// initiating a new instance.
+	DefaultSalt string = "418F04528EF6876541AF850858CD1CF394E96956607103B356DD74ADB6948001"
 )
 
 var (
@@ -53,24 +54,30 @@ var (
 	ErrKeyColumnsTooShort = errors.New("key column width less than group size")
 )
 
-// Krypto431 interface (for Keys and Messages). Not used internally in
-// package as there is an instance struct.
-type Krypto431 interface {
+// Wiper interface (for Keys and Messages only). Not used internally in package.
+type Wiper interface {
 	Wipe() error
 	RandomWipe() error
 	ZeroWipe() error
+}
+
+// Returns a grouped string according to GroupSize set in the instance
+// (Krypto431). Keys and Messages implement this interface.
+type GroupFormatter interface {
 	Groups() (*[]rune, error)
 	GroupsBlock() (*[]rune, error)
 }
 
-// Instance stores generated keys, plaintext, ciphertext, callsign(s) and
+// Krypto431 store generated keys, plaintext, ciphertext, callsign(s) and
 // configuration items. It is mandatory to populate MyCallSigns with at least
 // one call sign (something identifying yourself in message handling). It will
 // be converted to upper case. Mutex and persistance file (saveFile) are not
 // exported meaning values will not be persisted to disk.
-type Instance struct {
+type Krypto431 struct {
 	mx                        *sync.Mutex
 	saveFile                  string
+	saveFileKey               *[]byte
+	salt                      *[]byte
 	overwriteSaveFileIfExists bool
 	interactive               bool
 	GroupSize                 int       `json:",omitempty"`
@@ -94,7 +101,7 @@ type Key struct {
 	Expires  dtg.DTG
 	Created  dtg.DTG
 	Used     bool `json:",omitempty"`
-	instance *Instance
+	instance *Krypto431
 }
 
 // Message holds plaintext and ciphertext. To encrypt, you need to populate the
@@ -118,7 +125,7 @@ type Message struct {
 	Binary     []byte   `json:",omitempty"`
 	CipherText []rune   `json:",omitempty"`
 	Recipients [][]rune `json:",omitempty"`
-	instance   *Instance
+	instance   *Krypto431
 }
 
 // A chunk is internal to the Encipher function and is either the complete
@@ -175,6 +182,53 @@ func RandomWipe(b *[]rune) error {
 
 // ZeroWipe wipes a rune slice with zeroes.
 func ZeroWipe(b *[]rune) error {
+	if b == nil {
+		return ErrNilPointer
+	}
+	for i := range *b {
+		(*b)[i] = 0
+	}
+	*b = nil
+	return nil
+}
+
+// WipeBytes wipes a byte slice.
+func WipeBytes(b *[]byte) error {
+	if b == nil {
+		return ErrNilPointer
+	}
+	if useCrandWipe {
+		err := RandomWipeBytes(b)
+		if err != nil {
+			return err
+		}
+	} else {
+		err := ZeroWipeBytes(b)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RandomWipeBytes wipes a byte slice with random bytes.
+func RandomWipeBytes(b *[]byte) error {
+	if b == nil {
+		return ErrNilPointer
+	}
+	written, err := crand.Read(*b)
+	if err != nil || written != len(*b) {
+		if err != nil {
+			return err
+		}
+		ZeroWipeBytes(b)
+	}
+	*b = nil
+	return nil
+}
+
+// ZeroWipeBytes wipes a byte slice with zeroes.
+func ZeroWipeBytes(b *[]byte) error {
 	if b == nil {
 		return ErrNilPointer
 	}
@@ -288,7 +342,7 @@ func (t *Message) Groups() (*[]rune, error) {
 
 // GroupsBlock returns a string representation of the key where each group is
 // separated by a space and new lines if the block is longer than
-// Instance.Columns (or defaultColumns). Don't forget to Wipe(b []rune) this
+// Krypto431.Columns (or defaultColumns). Don't forget to Wipe(b []rune) this
 // slice when you are done!
 func (k *Key) GroupsBlock() (*[]rune, error) {
 	return groups(&k.Runes, k.instance.GroupSize, k.instance.KeyColumns)
@@ -421,10 +475,11 @@ func (c *chunk) ZeroWipe() error {
 	return nil
 }
 
-// New creates a new Instance construct
-func New(opts ...Option) Instance {
-	i := Instance{
+// New creates a new Krypto431 instance.
+func New(opts ...Option) Krypto431 {
+	i := Krypto431{
 		saveFile:                  DefaultSaveFile,
+		saveFileKey:               nil,
 		overwriteSaveFileIfExists: false,
 		interactive:               false,
 		GroupSize:                 DefaultGroupSize,
@@ -433,6 +488,12 @@ func New(opts ...Option) Instance {
 		KeyColumns:                DefaultKeyColumns,
 		Keys:                      make([]Key, 0, DefaultKeyCapacity),
 		Messages:                  make([]Message, 0, DefaultMessageCapacity),
+	}
+	salt, err := hex.DecodeString(DefaultSalt)
+	if err != nil {
+		salt = nil
+	} else {
+		i.salt = &salt
 	}
 	for _, opt := range opts {
 		opt(&i)
@@ -444,57 +505,86 @@ func New(opts ...Option) Instance {
 }
 
 // Option fn type for the New() and Load() constructs.
-type Option func(r *Instance)
+type Option func(r *Krypto431)
 
+// WithKey overrides deriving the encryption key for the save file from a
+// password by using the key directly. Must be 32 bytes long.
+func WithKey(key *[]byte) Option {
+	if key == nil || len(*key) != 32 {
+		return func(r *Krypto431) {
+			r.saveFileKey = nil
+		}
+	}
+	return func(r *Krypto431) {
+		r.saveFileKey = key
+	}
+}
+
+// WithSalt() runs the salt string through hex.DecodeString() to derive a byte
+// slice that, if at least 32 bytes long, is used instead of the default
+// internal fixed salt.
+func WithSalt(salt string) Option {
+	bsalt, err := hex.DecodeString(salt)
+	if err != nil || len(bsalt) < MinimumSaltLength {
+		// KDF function uses SHA256 so the salt should be at least 32 bytes (20
+		// bytes if it were SHA1).
+		return func(r *Krypto431) {
+			r.salt = nil
+		}
+	}
+	return func(r *Krypto431) {
+		r.salt = &bsalt
+	}
+}
 func WithCallSign(cs string) Option {
-	return func(r *Instance) {
+	return func(r *Krypto431) {
 		r.MyCallSigns = append(r.MyCallSigns, []rune(cs))
 	}
 }
 func WithCallSigns(css ...string) Option {
-	return func(r *Instance) {
+	return func(r *Krypto431) {
 		for i := range css {
 			r.MyCallSigns = append(r.MyCallSigns, []rune(css[i]))
 		}
 	}
 }
 func WithMutex(mu *sync.Mutex) Option {
-	return func(r *Instance) {
+	return func(r *Krypto431) {
 		r.mx = mu
 	}
 }
 func WithGroupSize(n int) Option {
-	return func(r *Instance) {
+	return func(r *Krypto431) {
 		r.GroupSize = n
 	}
 }
 func WithKeyLength(n int) Option {
-	return func(r *Instance) {
+	return func(r *Krypto431) {
 		r.KeyLength = n
 	}
 }
 func WithColumns(n int) Option {
-	return func(r *Instance) {
+	return func(r *Krypto431) {
 		r.Columns = n
 	}
 }
 func WithKeyColumns(n int) Option {
-	return func(r *Instance) {
+	return func(r *Krypto431) {
 		r.KeyColumns = n
 	}
 }
 func WithSaveFile(savefile string) Option {
-	return func(r *Instance) {
+	return func(r *Krypto431) {
 		r.saveFile = savefile
 	}
 }
 func WithOverwriteSaveFileIfExists(b bool) Option {
-	return func(r *Instance) {
+	return func(r *Krypto431) {
 		r.overwriteSaveFileIfExists = b
 	}
 }
 func WithInteractive(b bool) Option {
-	return func(r *Instance) {
+	return func(r *Krypto431) {
 		r.interactive = b
 	}
 }
@@ -529,7 +619,7 @@ loop:
 
 // Asserts that settings in the instance are valid. Function is intended to be
 // executed after New() to assert that settings are valid.
-func (r *Instance) Assert() error {
+func (r *Krypto431) Assert() error {
 	if len(r.saveFile) == 0 {
 		return ErrNoSaveFile
 	}
@@ -548,8 +638,8 @@ func (r *Instance) Assert() error {
 	return nil
 }
 
-// Close is an alias for Instance.Wipe()
-func (r *Instance) Close() {
+// Close is an alias for Krypto431.Wipe()
+func (r *Krypto431) Close() {
 	r.Wipe()
 }
 
@@ -560,7 +650,7 @@ func (r *Instance) Close() {
 // respectively, but it is up to the user of the API to call Wipe() or Close()
 // when using the methods to read keys and ciphertext from database, file or
 // stdin when done processing them.
-func (r *Instance) Wipe() {
+func (r *Krypto431) Wipe() {
 	for i := range r.Keys {
 		r.Keys[i].Wipe()
 	}
@@ -571,115 +661,11 @@ func (r *Instance) Wipe() {
 	r.Messages = nil
 }
 
-// TODO: Try https://github.com/nknorg/encrypted-stream for encrypting file before (after?) gzip...
-func (r *Instance) Save() error {
-	if len(r.saveFile) == 0 {
-		return ErrNoSaveFile
-	}
-	// If save file starts with a tilde, resolve it to the user's home directory.
-	if strings.HasPrefix(r.saveFile, "~/") {
-		dirname, err := os.UserHomeDir()
-		if err != nil {
-			return err
-		}
-		r.saveFile = filepath.Join(dirname, r.saveFile[2:])
-	}
-	_, err := os.Stat(r.saveFile)
-	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
-			// Other error than file not found...
-			return err
-		}
-	} else {
-		// saveFile already exists
-		if !r.overwriteSaveFileIfExists {
-			if r.interactive {
-				overwrite := false
-				prompt := &survey.Confirm{
-					Message: fmt.Sprintf("Overwrite %s?", r.saveFile),
-				}
-				survey.AskOne(prompt, &overwrite)
-				if !overwrite {
-					return nil
-				}
-			} else {
-				return fmt.Errorf("save file %s already exist (will not overwrite)", r.saveFile)
-			}
-		}
-	}
-	// Create save file if it does not exist or truncate it if it does exist.
-	f, err := os.OpenFile(r.saveFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	// Krypto431 save files are gzipped GOB files.
-	fgz := gzip.NewWriter(f)
-	defer fgz.Close()
-	gobEncoder := gob.NewEncoder(fgz)
-	err = gobEncoder.Encode(r)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *Instance) Load() error {
-	if len(r.saveFile) == 0 {
-		return ErrNoSaveFile
-	}
-	// If save file starts with a tilde, resolve it to the user's home directory.
-	if strings.HasPrefix(r.saveFile, "~/") {
-		dirname, err := os.UserHomeDir()
-		if err != nil {
-			return err
-		}
-		r.saveFile = filepath.Join(dirname, r.saveFile[2:])
-	}
-
-	var f *os.File
-	_, err := os.Stat(r.saveFile)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("persistance file %s does not exist, please initialize it to continue", r.saveFile)
-		} else {
-			return err
-		}
-	} else {
-		// Save file does exist, load it...
-		f, err = os.Open(r.saveFile)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		fgz, err := gzip.NewReader(f)
-		if err != nil {
-			return err
-		}
-		defer fgz.Close()
-		gobDecoder := gob.NewDecoder(fgz)
-		err = gobDecoder.Decode(r)
-		if err != nil {
-			return err
-		}
-		// Fix all unexported instance fields in keys and messages
-		for i := range r.Keys {
-			r.Keys[i].instance = r
-		}
-		for i := range r.Messages {
-			r.Messages[i].instance = r
-		}
-		// Allow overwriting file after it's been loaded...
-		r.overwriteSaveFileIfExists = true
-	}
-	return nil
-}
-
 // NewTextMessage() is a variadic function where first argument is the message,
 // second is a comma-separated list with recipients, third a key id to override
 // the key finder function and use a specific key (not marked "used"). First
 // argument is mandatory, rest are optional.
-func (r *Instance) NewTextMessage(msg ...string) (err error) {
+func (r *Krypto431) NewTextMessage(msg ...string) (err error) {
 	// 1st arg = message as a utf8 string (mandatory)
 	// 2nd arg = recipients as a comma-separated list (optional)
 	// 3rd arg = key id, overrides the key finder function (optional)
@@ -727,10 +713,10 @@ func (r *Instance) NewTextMessage(msg ...string) (err error) {
 
 // TODO: Implement! :)
 
-//func (r *Instance) NewBinaryMessage()
+//func (r *Krypto431) NewBinaryMessage()
 
-//func (r *Instance) Encode(plaintext string) {}
-//func (r *Instance) Decode(plaintext string) {}
+//func (r *Krypto431) Encode(plaintext string) {}
+//func (r *Krypto431) Decode(plaintext string) {}
 
 // Generic function to convert an array of rune slices (runes) into a string
 // slice.

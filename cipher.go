@@ -376,7 +376,7 @@ func (state *codecState) decodeCharacter(input *rune, output *[]rune) error {
 
 /* // Encode codes the PlainText field into the EncodedText field of a Message
 // struct. Encode will prepend one star (*) in the beginning and add a key
-// change if the message is more than Instance.KeyLength (minus characters
+// change if the message is more than Krypto431.KeyLength (minus characters
 // needed to make a key change) long and add a star (*) as a placeholder for a
 // key. In order to encrypt this encoded message you need to have key(s) of the
 // correct length available in the database or encryption will fail.
@@ -421,7 +421,7 @@ func (t *Message) Decode() error {
 // recipients are keepers of that key. If the recipient slice is empty, it will
 // find the first un-used anonymous key (a key without any keepers). Function
 // returns a pointer to the key. FindKey will not mark the key as used.
-func (r *Instance) FindKey(recipients ...[]rune) *Key {
+func (r *Krypto431) FindKey(recipients ...[]rune) *Key {
 	numberOfRecipients := len(recipients)
 	for i := range r.Keys {
 		if r.Keys[i].Used {
@@ -450,7 +450,7 @@ func (r *Instance) FindKey(recipients ...[]rune) *Key {
 
 // GetKey() searches for a Key object with an Id of keyId and returns a pointer
 // to this Key or error if not found.
-func (r *Instance) GetKey(keyId []rune) (*Key, error) {
+func (r *Krypto431) GetKey(keyId []rune) (*Key, error) {
 	k := strings.ToUpper(strings.TrimSpace(string(keyId)))
 	for i := range r.Keys {
 		if k == string(r.Keys[i].Id) {
@@ -462,7 +462,7 @@ func (r *Instance) GetKey(keyId []rune) (*Key, error) {
 
 // MarkKeyUsed() looks for the keyId among the instance's Keys and sets the Used
 // property to true or false depending on what the "used" variable is set to.
-func (r *Instance) MarkKeyUsed(keyId []rune, used bool) error {
+func (r *Krypto431) MarkKeyUsed(keyId []rune, used bool) error {
 	k := strings.ToUpper(strings.TrimSpace(string(keyId)))
 	for i := range r.Keys {
 		if k == string(r.Keys[i].Id) {

@@ -1,9 +1,6 @@
 package krypto431
 
-import (
-	"testing"
-)
-
+/*
 func Test_PlainText_Encode(t *testing.T) {
 	testTable := []struct {
 		text    []rune
@@ -28,3 +25,4 @@ func Test_PlainText_Encode(t *testing.T) {
 	}
 
 }
+*/
