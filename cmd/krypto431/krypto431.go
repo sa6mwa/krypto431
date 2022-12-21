@@ -25,6 +25,7 @@ func fatalf(format string, a ...any) {
 
 type options struct {
 	saveFile     string
+	salt         string
 	save         bool
 	call         string
 	numberOfKeys int
@@ -37,6 +38,7 @@ type options struct {
 	exportItems  string
 	importItems  string
 	deleteItems  bool
+	and          bool
 	all          bool
 	used         bool
 	unused       bool
@@ -44,26 +46,33 @@ type options struct {
 }
 
 const (
-	osFile         string = "file"
-	osSave         string = "save"
-	osCall         string = "call"
-	osNumberOfKeys string = "keys"
-	osKeepers      string = "keepers"
-	osKeyLength    string = "keylength"
-	osGroupSize    string = "groupsize"
-	osKeyColumns   string = "keycolumns"
-	osColumns      string = "columns"
-	osList         string = "list"
-	osExport       string = "export"
-	osImport       string = "import"
-	osDelete       string = "delete"
-	osAll          string = "all"
-	osUsed         string = "used"
-	osUnused       string = "unused"
-	osYes          string = "yes"
+	oFile         string = "file"
+	oSalt         string = "salt"
+	oSave         string = "save"
+	oCall         string = "call"
+	oNumberOfKeys string = "keys"
+	oKeepers      string = "keepers"
+	oKeyLength    string = "keylength"
+	oGroupSize    string = "groupsize"
+	oKeyColumns   string = "keycolumns"
+	oColumns      string = "columns"
+	oList         string = "list"
+	oExport       string = "export"
+	oImport       string = "import"
+	oDelete       string = "delete"
+	oAnd          string = "and"
+	oAll          string = "all"
+	oUsed         string = "used"
+	oUnused       string = "unused"
+	oYes          string = "yes"
 )
 
 func main() {
+	cli.AppHelpTemplate = fmt.Sprintf(`%s
+Dedicated to the memory of Maximilian Kolbe (SP3RN) 08JAN1894-14AUG1941.
+
+`, cli.AppHelpTemplate)
+
 	app := &cli.App{
 		Name: "krypto431",
 		Authors: []*cli.Author{
@@ -80,6 +89,21 @@ func main() {
 		Copyright:              "(C) 2021-2023 Michel Blomgren, https://github.com/sa6mwa/krypto431",
 		UseShortOptionHandling: true,
 		EnableBashCompletion:   true,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    oFile,
+				Aliases: []string{"f"},
+				EnvVars: []string{"KRYPTO431_FILE"},
+				Value:   krypto431.DefaultSaveFile,
+				Usage:   "Storage file for persisting keys and messages",
+			},
+			&cli.StringFlag{
+				Name:    oSalt,
+				EnvVars: []string{"KRYPTO431_SALT"},
+				Value:   krypto431.DefaultSalt,
+				Usage:   "Custom salt. Must be a hex encoded string decoded to at least 32 bytes\nBeware! If you misplace this salt you will not be able to decrypt\nthe save-file even if you have the passphrase",
+			},
+		},
 		Commands: []*cli.Command{
 			{
 				Name:    "dev",
@@ -88,7 +112,7 @@ func main() {
 				Action:  dev,
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
-						Name:    osSave,
+						Name:    oSave,
 						Aliases: []string{"s"},
 						Value:   false,
 						Usage:   "Persist changes to save-file",
@@ -101,46 +125,46 @@ func main() {
 				Action: initialize,
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
-						Name:    osYes,
+						Name:    oYes,
 						Aliases: []string{"y"},
 						Value:   false,
 						Usage:   "If storage file exists, overwrite without asking",
 					},
 					&cli.StringFlag{
-						Name:    osCall,
+						Name:    oCall,
 						Aliases: []string{"c"},
 						Usage:   "My call-sign",
 					},
 					&cli.IntFlag{
-						Name:    osNumberOfKeys,
+						Name:    oNumberOfKeys,
 						Aliases: []string{"n"},
 						Value:   0,
 						Usage:   "Initial keys to generate",
 					},
 					&cli.StringSliceFlag{
-						Name:    osKeepers,
+						Name:    oKeepers,
 						Aliases: []string{"k"},
 						Usage:   "Call-sign(s) that keep these keys (omit for anonymous keys)",
 					},
 					&cli.IntFlag{
-						Name:    osKeyLength,
+						Name:    oKeyLength,
 						Aliases: []string{"l"},
 						Value:   krypto431.DefaultKeyLength,
 						Usage:   "Length of each key",
 					},
 					&cli.IntFlag{
-						Name:    osGroupSize,
+						Name:    oGroupSize,
 						Aliases: []string{"g"},
 						Value:   krypto431.DefaultGroupSize,
 						Usage:   "Number of characters per group",
 					},
 					&cli.IntFlag{
-						Name:  osKeyColumns,
+						Name:  oKeyColumns,
 						Usage: "Width of key in print-out",
 						Value: krypto431.DefaultKeyColumns,
 					},
 					&cli.IntFlag{
-						Name:  osColumns,
+						Name:  oColumns,
 						Usage: "Total width of print-out",
 						Value: krypto431.DefaultColumns,
 						Action: func(ctx *cli.Context, v int) error {
@@ -158,44 +182,65 @@ func main() {
 				Action: generateKeys,
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
-						Name:    osList,
+						Name:    oList,
 						Aliases: []string{"l"},
 						Value:   false,
-						Usage:   "List keys (filter on keepers and used/unused)",
+						Usage:   "List keys",
+					},
+					&cli.IntFlag{
+						Name:    oNumberOfKeys,
+						Aliases: []string{"n"},
+						Usage:   "Number of new keys to generate",
+						Value:   0,
 					},
 					&cli.BoolFlag{
-						Name:    osDelete,
+						Name:    oDelete,
 						Aliases: []string{"d"},
 						Value:   false,
 						Usage:   "Delete keys (interactive)",
 					},
 					&cli.StringFlag{
-						Name:    osImport,
+						Name:    oImport,
 						Aliases: []string{"i"},
 						Usage:   "Import keys from file",
 					},
 					&cli.StringFlag{
-						Name:    osExport,
+						Name:    oExport,
 						Aliases: []string{"e"},
 						Usage:   "Export keys from main file to new file",
 					},
-
-					&cli.IntFlag{
-						Name:    osNumberOfKeys,
-						Aliases: []string{"n"},
-						Value:   1,
-						Usage:   "Number of keys to generate",
-					},
 					&cli.StringSliceFlag{
-						Name:    osKeepers,
+						Name:    oKeepers,
 						Aliases: []string{"k"},
-						Usage:   "Call-signs to distribute these keys to (keepers of the keys)",
+						Usage:   "Call-signs to keepers of keys (new and as filter, empty on new will make anonymous keys)",
 					},
 					&cli.BoolFlag{
-						Name:    osSave,
-						Aliases: []string{"s"},
-						Value:   true,
-						Usage:   "Persist key(s) to save-file",
+						Name:  oAnd,
+						Usage: "All keepers, not just one (AND instead of OR)",
+						Value: false,
+					},
+					&cli.BoolFlag{
+						Name:  oAll,
+						Usage: "Select all keys - list, import, export, delete (after confirmation)",
+						Value: false,
+					},
+					&cli.BoolFlag{
+						Name:    oUsed,
+						Aliases: []string{"u"},
+						Usage:   "Select keys marked used only (list, import, export, delete)",
+						Value:   false,
+					},
+					&cli.BoolFlag{
+						Name:    oUnused,
+						Aliases: []string{"U"},
+						Usage:   "Select unused keys only (list, import, export, delete)",
+						Value:   false,
+					},
+					&cli.BoolFlag{
+						Name:    oYes,
+						Aliases: []string{"y"},
+						Usage:   "Force option, answer yes on questions (non-interactive)",
+						Value:   false,
 					},
 				},
 			},
@@ -235,14 +280,6 @@ func main() {
 				},
 			},
 		},
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "file",
-				Aliases: []string{"f"},
-				Value:   krypto431.DefaultSaveFile,
-				Usage:   "Storage file for persisting keys and messages",
-			},
-		},
 	}
 
 	err := app.Run(os.Args)
@@ -253,18 +290,18 @@ func main() {
 
 func initialize(c *cli.Context) error {
 	o := &options{
-		saveFile:     c.String(osFile),
-		yes:          c.Bool(osYes),
-		call:         c.String(osCall),
-		numberOfKeys: c.Int(osNumberOfKeys),
-		keepers:      c.StringSlice(osKeepers),
-		keyLength:    c.Int(osKeyLength),
-		groupSize:    c.Int(osGroupSize),
-		keyColumns:   c.Int(osKeyColumns),
-		columns:      c.Int(osColumns),
+		saveFile:     c.String(oFile),
+		yes:          c.Bool(oYes),
+		call:         c.String(oCall),
+		numberOfKeys: c.Int(oNumberOfKeys),
+		keepers:      c.StringSlice(oKeepers),
+		keyLength:    c.Int(oKeyLength),
+		groupSize:    c.Int(oGroupSize),
+		keyColumns:   c.Int(oKeyColumns),
+		columns:      c.Int(oColumns),
 	}
 
-	if !c.IsSet(osCall) {
+	if !c.IsSet(oCall) {
 		// Required option, ask for call-sign using go-survey if -y is not set...
 		if o.yes {
 			return krypto431.ErrNoCallSign
@@ -281,7 +318,7 @@ func initialize(c *cli.Context) error {
 		o.call = strings.ToUpper(strings.TrimSpace(o.call))
 	}
 
-	flags := []string{osYes, osCall, osNumberOfKeys, osKeepers, osKeyLength, osGroupSize}
+	flags := []string{oYes, oCall, oNumberOfKeys, oKeepers, oKeyLength, oGroupSize}
 	goInteractive := true
 	for i := range flags {
 		if c.IsSet(flags[i]) {
@@ -424,17 +461,18 @@ func initialize(c *cli.Context) error {
 
 func keys(c *cli.Context) error {
 	o := &options{
-		saveFile:     c.String(osFile),
-		listItems:    c.Bool(osList),
-		exportItems:  c.String(osExport),
-		importItems:  c.String(osImport),
-		deleteItems:  c.Bool(osDelete),
-		numberOfKeys: c.Int(osNumberOfKeys),
-		keepers:      c.StringSlice(osKeepers),
-		all:          c.Bool(osAll),
-		used:         c.Bool(osUsed),
-		unused:       c.Bool(osUnused),
-		yes:          c.Bool(osYes),
+		saveFile:     c.String(oFile),
+		listItems:    c.Bool(oList),
+		exportItems:  c.String(oExport),
+		importItems:  c.String(oImport),
+		deleteItems:  c.Bool(oDelete),
+		numberOfKeys: c.Int(oNumberOfKeys),
+		keepers:      c.StringSlice(oKeepers),
+
+		all:    c.Bool(oAll),
+		used:   c.Bool(oUsed),
+		unused: c.Bool(oUnused),
+		yes:    c.Bool(oYes),
 	}
 
 	k := krypto431.New(krypto431.WithSaveFile(o.saveFile))
@@ -444,6 +482,8 @@ func keys(c *cli.Context) error {
 	}
 
 	// list keys is a singleton, exit after listing
+
+	// generate new keys is also a singleton
 
 	// delete keys
 
@@ -486,7 +526,7 @@ func listKeys(c *cli.Context) error {
 	k := krypto431.New(krypto431.WithSaveFile(saveFile), krypto431.WithInteractive(true))
 	err := k.Load()
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to load %s: %w", saveFile, err)
 	}
 
 	sv := fmt.Sprintf("%%-%ds", k.GroupSize+1)

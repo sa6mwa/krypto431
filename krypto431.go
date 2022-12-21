@@ -26,14 +26,16 @@ const (
 	DefaultEncodedTextCapacity int    = DefaultKeyLength * 2                    // 700
 	DefaultMessageCapacity     int    = 10000                                   // 10k messages
 	DefaultPlainTextCapacity   int    = DefaultKeyLength * DefaultChunkCapacity // 7000
+	DefaultPBKDF2Iteration     int    = 310000                                  // https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
 	MinimumSupportedKeyLength  int    = 20
 	MinimumColumnWidth         int    = 85 // Trigraph table is 80 characters wide
 	MinimumSaltLength          int    = 32
 	MinimumPasswordLength      int    = 8
 	// Fixed salt for pbkdf2 derived keys. Can be changed using
 	// krypto431.New(krypto431.WithSalt(atLeast32characterSaltString)) when
-	// initiating a new instance.
-	DefaultSalt string = "418F04528EF6876541AF850858CD1CF394E96956607103B356DD74ADB6948001"
+	// initiating a new instance. You can use GenerateSalt() to generate a new
+	// salt for use in WithSalt() and your UI program.
+	DefaultSalt string = "d14461856f830fc5a1f9ba1b845fae5f61c54767ded39cf943174e6869b44476"
 )
 
 var (
@@ -507,8 +509,9 @@ func New(opts ...Option) Krypto431 {
 // Option fn type for the New() construct.
 type Option func(r *Krypto431)
 
-// WithKey overrides deriving the encryption key for the save file from a
-// password by using the key directly. Must be 32 bytes long.
+// WithKey overrides deriving the encryption key for the persistance-file from a
+// password by using the key directly. Must be 32 bytes long. Beware! Underlying
+// byte slice will be wiped when closing or wiping the Krypto431 instance.
 func WithKey(key *[]byte) Option {
 	if key == nil || len(*key) != 32 {
 		return func(k *Krypto431) {
@@ -520,14 +523,49 @@ func WithKey(key *[]byte) Option {
 	}
 }
 
-// WithSalt() runs the salt string through hex.DecodeString() to derive a byte
-// slice that, if at least 32 bytes long, is used instead of the default
-// internal fixed salt.
-func WithSalt(salt string) Option {
+// As WithKey, but takes a string and attempts to hex decode it into a byte
+// slice. Not recommended to use as it doesn't fail on error, just silently nils
+// the key.
+func WithKeyString(hexEncodedString string) Option {
+	nilKeyFunc := func(k *Krypto431) {
+		k.saveFileKey = nil
+	}
+	if len(hexEncodedString) != 32*2 {
+		return nilKeyFunc
+	}
+	key, err := hex.DecodeString(hexEncodedString)
+	if err != nil {
+		return nilKeyFunc
+	}
+	return func(k *Krypto431) {
+		k.saveFileKey = &key
+	}
+}
+
+// WithSalt() can be used to override the default fixed salt with a custom salt.
+// Beware that the underlying byte slice will be wiped when closing or wiping
+// the Krypto431 instance. Use hex.DecodeString() to generate a 32 byte slice
+// from a 64 byte hex string produced by for example GenerateSalt().
+func WithSalt(salt *[]byte) Option {
+	// KDF function uses SHA256 so the salt should preferably be at least 32 bytes.
+	if salt == nil || len(*salt) < 32 {
+		return func(k *Krypto431) {
+			k.salt = nil
+		}
+	}
+	return func(k *Krypto431) {
+		k.salt = salt
+	}
+}
+
+// WithSaltString() runs the salt string through hex.DecodeString() to derive a
+// byte slice that, if at least 32 bytes long, is used instead of the default
+// internal fixed salt. Not recommended as it just nils the salt on error, use
+// WithSalt() and solve decoding with e.g hex.DecodeString() prior to instance
+// creation.
+func WithSaltString(salt string) Option {
 	bsalt, err := hex.DecodeString(salt)
 	if err != nil || len(bsalt) < MinimumSaltLength {
-		// KDF function uses SHA256 so the salt should be at least 32 bytes (20
-		// bytes if it were SHA1).
 		return func(r *Krypto431) {
 			r.salt = nil
 		}
@@ -536,6 +574,7 @@ func WithSalt(salt string) Option {
 		r.salt = &bsalt
 	}
 }
+
 func WithCallSign(cs string) Option {
 	return func(r *Krypto431) {
 		r.MyCallSigns = append(r.MyCallSigns, []rune(cs))

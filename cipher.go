@@ -526,8 +526,8 @@ func (t *Message) EnrichWithKey() error {
 
 // Encipher() enciphers the PlainText field into the CipherText field of a
 // Message object. Verbs encrypt and decrypt are only used for AES
-// encryption/decryption of the save file, while words encipher and decipher are
-// used for message ciphering in Krypto431.
+// encryption/decryption of the persistance file, while words encipher and
+// decipher are used for message ciphering in Krypto431.
 func (t *Message) Encipher() error {
 	err := t.EnrichWithKey()
 	if err != nil {
