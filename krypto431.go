@@ -20,7 +20,7 @@ const (
 	DefaultKeyLength           int    = 350 // 70 groups, 5 groups per row is 14 rows total
 	DefaultColumns             int    = 110
 	DefaultKeyColumns          int    = 30
-	DefaultSaveFile            string = "~/.krypto431.gob"
+	DefaultPersistence         string = "~/.krypto431.gob"
 	DefaultKeyCapacity         int    = 50000                                   // 50k keys
 	DefaultChunkCapacity       int    = 20                                      // 20 chunks
 	DefaultEncodedTextCapacity int    = DefaultKeyLength * 2                    // 700
@@ -49,7 +49,7 @@ var (
 	ErrUnsupportedTable   = errors.New("character table not supported")
 	ErrOutOfKeys          = errors.New("can not encipher multi-key message, unable to find additional key(s)")
 	ErrNoCallSign         = errors.New("need to specify your call-sign")
-	ErrNoSaveFile         = errors.New("missing file name for persisting keys, messages and settings")
+	ErrNoPersistence      = errors.New("missing file name for persisting keys, messages and settings")
 	ErrInvalidGroupSize   = errors.New("group size must be 1 or longer")
 	ErrKeyTooShort        = fmt.Errorf("key length must be %d characters or longer", MinimumSupportedKeyLength)
 	ErrTooNarrow          = fmt.Errorf("column width must be at least %d characters wide", MinimumColumnWidth)
@@ -73,22 +73,22 @@ type GroupFormatter interface {
 // Krypto431 store generated keys, plaintext, ciphertext, callsign(s) and
 // configuration items. It is mandatory to populate MyCallSigns with at least
 // one call sign (something identifying yourself in message handling). It will
-// be converted to upper case. Mutex and persistance file (saveFile) are not
+// be converted to upper case. Mutex and persistance file (persistence) are not
 // exported meaning values will not be persisted to disk.
 type Krypto431 struct {
-	mx                        *sync.Mutex
-	saveFile                  string
-	saveFileKey               *[]byte
-	salt                      *[]byte
-	overwriteSaveFileIfExists bool
-	interactive               bool
-	GroupSize                 int       `json:",omitempty"`
-	KeyLength                 int       `json:",omitempty"`
-	Columns                   int       `json:",omitempty"`
-	KeyColumns                int       `json:",omitempty"`
-	Keys                      []Key     `json:",omitempty"`
-	Messages                  []Message `json:",omitempty"`
-	MyCallSigns               [][]rune  `json:",omitempty"`
+	mx                           *sync.Mutex
+	persistence                  string
+	persistenceKey               *[]byte
+	salt                         *[]byte
+	overwritePersistenceIfExists bool
+	interactive                  bool
+	GroupSize                    int       `json:",omitempty"`
+	KeyLength                    int       `json:",omitempty"`
+	Columns                      int       `json:",omitempty"`
+	KeyColumns                   int       `json:",omitempty"`
+	Keys                         []Key     `json:",omitempty"`
+	Messages                     []Message `json:",omitempty"`
+	MyCallSigns                  [][]rune  `json:",omitempty"`
 }
 
 // Key struct holds a key. Keepers is a list of callsigns or other identifiers
@@ -480,16 +480,16 @@ func (c *chunk) ZeroWipe() error {
 // New creates a new Krypto431 instance.
 func New(opts ...Option) Krypto431 {
 	instance := Krypto431{
-		saveFile:                  DefaultSaveFile,
-		saveFileKey:               nil,
-		overwriteSaveFileIfExists: false,
-		interactive:               false,
-		GroupSize:                 DefaultGroupSize,
-		KeyLength:                 DefaultKeyLength,
-		Columns:                   DefaultColumns,
-		KeyColumns:                DefaultKeyColumns,
-		Keys:                      make([]Key, 0, DefaultKeyCapacity),
-		Messages:                  make([]Message, 0, DefaultMessageCapacity),
+		persistence:                  DefaultPersistence,
+		persistenceKey:               nil,
+		overwritePersistenceIfExists: false,
+		interactive:                  false,
+		GroupSize:                    DefaultGroupSize,
+		KeyLength:                    DefaultKeyLength,
+		Columns:                      DefaultColumns,
+		KeyColumns:                   DefaultKeyColumns,
+		Keys:                         make([]Key, 0, DefaultKeyCapacity),
+		Messages:                     make([]Message, 0, DefaultMessageCapacity),
 	}
 	salt, err := hex.DecodeString(DefaultSalt)
 	if err != nil {
@@ -507,7 +507,7 @@ func New(opts ...Option) Krypto431 {
 }
 
 // Option fn type for the New() construct.
-type Option func(r *Krypto431)
+type Option func(k *Krypto431)
 
 // WithKey overrides deriving the encryption key for the persistance-file from a
 // password by using the key directly. Must be 32 bytes long. Beware! Underlying
@@ -515,20 +515,20 @@ type Option func(r *Krypto431)
 func WithKey(key *[]byte) Option {
 	if key == nil || len(*key) != 32 {
 		return func(k *Krypto431) {
-			k.saveFileKey = nil
+			k.persistenceKey = nil
 		}
 	}
 	return func(k *Krypto431) {
-		k.saveFileKey = key
+		k.persistenceKey = key
 	}
 }
 
 // As WithKey, but takes a string and attempts to hex decode it into a byte
 // slice. Not recommended to use as it doesn't fail on error, just silently nils
-// the key.
+// the key. Use SetKeyFromString() on the instance after New() instead.
 func WithKeyString(hexEncodedString string) Option {
 	nilKeyFunc := func(k *Krypto431) {
-		k.saveFileKey = nil
+		k.persistenceKey = nil
 	}
 	if len(hexEncodedString) != 32*2 {
 		return nilKeyFunc
@@ -538,7 +538,7 @@ func WithKeyString(hexEncodedString string) Option {
 		return nilKeyFunc
 	}
 	return func(k *Krypto431) {
-		k.saveFileKey = &key
+		k.persistenceKey = &key
 	}
 }
 
@@ -562,96 +562,70 @@ func WithSalt(salt *[]byte) Option {
 // byte slice that, if at least 32 bytes long, is used instead of the default
 // internal fixed salt. Not recommended as it just nils the salt on error, use
 // WithSalt() and solve decoding with e.g hex.DecodeString() prior to instance
-// creation.
+// creation. You can also use SetSaltFromString() on the instance after New().
 func WithSaltString(salt string) Option {
 	bsalt, err := hex.DecodeString(salt)
 	if err != nil || len(bsalt) < MinimumSaltLength {
-		return func(r *Krypto431) {
-			r.salt = nil
+		return func(k *Krypto431) {
+			k.salt = nil
 		}
 	}
-	return func(r *Krypto431) {
-		r.salt = &bsalt
+	return func(k *Krypto431) {
+		k.salt = &bsalt
 	}
 }
 
 func WithCallSign(cs string) Option {
-	return func(r *Krypto431) {
-		r.MyCallSigns = append(r.MyCallSigns, []rune(cs))
+	return func(k *Krypto431) {
+		k.MyCallSigns = append(k.MyCallSigns, []rune(cs))
 	}
 }
 func WithCallSigns(css ...string) Option {
-	return func(r *Krypto431) {
+	return func(k *Krypto431) {
 		for i := range css {
-			r.MyCallSigns = append(r.MyCallSigns, []rune(css[i]))
+			k.MyCallSigns = append(k.MyCallSigns, []rune(css[i]))
 		}
 	}
 }
 func WithMutex(mu *sync.Mutex) Option {
-	return func(r *Krypto431) {
-		r.mx = mu
+	return func(k *Krypto431) {
+		k.mx = mu
 	}
 }
 func WithGroupSize(n int) Option {
-	return func(r *Krypto431) {
-		r.GroupSize = n
+	return func(k *Krypto431) {
+		k.GroupSize = n
 	}
 }
 func WithKeyLength(n int) Option {
-	return func(r *Krypto431) {
-		r.KeyLength = n
+	return func(k *Krypto431) {
+		k.KeyLength = n
 	}
 }
 func WithColumns(n int) Option {
-	return func(r *Krypto431) {
-		r.Columns = n
+	return func(k *Krypto431) {
+		k.Columns = n
 	}
 }
 func WithKeyColumns(n int) Option {
-	return func(r *Krypto431) {
-		r.KeyColumns = n
+	return func(k *Krypto431) {
+		k.KeyColumns = n
 	}
 }
-func WithSaveFile(savefile string) Option {
-	return func(r *Krypto431) {
-		r.saveFile = savefile
+func WithPersistence(savefile string) Option {
+	return func(k *Krypto431) {
+		k.persistence = savefile
 	}
 }
-func WithOverwriteSaveFileIfExists(b bool) Option {
-	return func(r *Krypto431) {
-		r.overwriteSaveFileIfExists = b
+func WithOverwritePersistenceIfExists(b bool) Option {
+	return func(k *Krypto431) {
+		k.overwritePersistenceIfExists = b
 	}
 }
 func WithInteractive(b bool) Option {
-	return func(r *Krypto431) {
-		r.interactive = b
+	return func(k *Krypto431) {
+		k.interactive = b
 	}
-}
-
-// AllNeedlesInHaystack returns true is all needles can be found in the
-// haystack, but if one slice in the haystack is a star (*) it will always
-// return true. Intended to find Keepers of Keys where needles are
-// Message.Recipients and haystack is Key.Keepers.
-func AllNeedlesInHaystack(needles *[][]rune, haystack *[][]rune) bool {
-	if needles == nil || haystack == nil {
-		return false
-	}
-	if len(*needles) == 0 || len(*haystack) == 0 {
-		return false
-	}
-loop:
-	for i := range *needles {
-		for x := range *haystack {
-			if string((*haystack)[x]) == `*` {
-				return true
-			}
-			if string((*haystack)[x]) == string((*needles)[i]) {
-				continue loop
-			}
-		}
-		return false
-	}
-	return true
 }
 
 // Methods assigned to the main struct...
@@ -659,8 +633,8 @@ loop:
 // Asserts that settings in the instance are valid. Function is intended to be
 // executed after New() to assert that settings are valid.
 func (k *Krypto431) Assert() error {
-	if len(k.saveFile) == 0 {
-		return ErrNoSaveFile
+	if len(k.persistence) == 0 {
+		return ErrNoPersistence
 	}
 	if k.GroupSize < 1 {
 		return ErrInvalidGroupSize
@@ -674,6 +648,48 @@ func (k *Krypto431) Assert() error {
 	if k.KeyColumns < k.GroupSize {
 		return ErrKeyColumnsTooShort
 	}
+	return nil
+}
+
+// Takes salt from a hex encoded string, converts it into a byte slice and sets
+// it as the instance's salt for the password-based key derivative function used
+// in Load() and Save(). Beware! If you loose the salt you used for encrypting
+// your persistance-file it will be practically impossible to decrypt it even if
+// you know the password.
+func (k *Krypto431) SetSaltFromString(salt string) error {
+	byteSalt, err := hex.DecodeString(salt)
+	if err != nil {
+		return err
+	}
+	if len(byteSalt) < MinimumSaltLength {
+		WipeBytes(&byteSalt)
+		return ErrTooShortSalt
+	}
+	k.salt = &byteSalt
+	return nil
+}
+
+// Takes persistence file key (PFK) from a hex encoded string (from perhaps
+// GeneratePFK()), converts it into a byte slice and sets it as the instance's
+// PFK which will override the password-based key derivative function and the
+// use of a salt. The key must be 32 bytes long (64 character long hex encoded
+// string). GeneratePFK() is available to generate a new random persistence file
+// key and return a hex encoded string. Beware that strings are immutable in Go
+// which means the internal wipe functions can not be used to clear this
+// sensitive string after closing or wiping the instance. The default
+// password-based method use byte or rune slices which are (or can be) wiped in
+// an attempt not to leave sensitive data around in memory after the program
+// exits.
+func (k *Krypto431) SetKeyFromString(key string) error {
+	byteKey, err := hex.DecodeString(key)
+	if err != nil {
+		return err
+	}
+	if len(byteKey) != 32 {
+		WipeBytes(&byteKey)
+		return ErrInvalidPFK
+	}
+	k.persistenceKey = &byteKey
 	return nil
 }
 
@@ -698,8 +714,8 @@ func (k *Krypto431) Wipe() {
 		k.Messages[i].Wipe()
 	}
 	k.Messages = nil
-	// wipe saveFileKey
-	WipeBytes(k.saveFileKey)
+	// wipe persistenceKey
+	WipeBytes(k.persistenceKey)
 	// wipe salt
 	WipeBytes(k.salt)
 }
@@ -756,50 +772,4 @@ func (k *Krypto431) NewTextMessage(msg ...string) (err error) {
 
 // TODO: Implement! :)
 
-//func (r *Krypto431) NewBinaryMessage()
-
-//func (r *Krypto431) Encode(plaintext string) {}
-//func (r *Krypto431) Decode(plaintext string) {}
-
-// Generic function to convert an array of rune slices (runes) into a string
-// slice.
-func RunesToStrings(runes *[][]rune) (stringSlice []string) {
-	for i := range *runes {
-		stringSlice = append(stringSlice, string((*runes)[i]))
-	}
-	return
-}
-
-// Generic function to vet one or more keeper strings, comma-separated or not.
-func VettedKeepers(keepers ...string) (vettedKeepers [][]rune) {
-	for i := range keepers {
-		subKeepers := strings.Split(keepers[i], ",")
-		for a := range subKeepers {
-			vettedKeeper := []rune(strings.ToUpper(strings.TrimSpace(subKeepers[a])))
-			if len(vettedKeeper) > 0 {
-				vettedKeepers = append(vettedKeepers, vettedKeeper)
-			}
-		}
-	}
-	return
-}
-
-// Function to compare two rune slices. Returns true if they are equal, false if
-// not.
-func EqualRunes(a *[]rune, b *[]rune) bool {
-	if a == nil && b == nil {
-		return true
-	}
-	if a == nil || b == nil {
-		return false
-	}
-	if len(*a) != len(*b) {
-		return false
-	}
-	for x := range *a {
-		if (*a)[x] != (*b)[x] {
-			return false
-		}
-	}
-	return true
-}
+//func (k *Krypto431) NewBinaryMessage() {}

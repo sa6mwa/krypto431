@@ -24,9 +24,11 @@ func fatalf(format string, a ...any) {
 }
 
 type options struct {
-	saveFile     string
+	persistence  string
 	salt         string
-	save         bool
+	pfk          string
+	password     string
+	random       bool
 	call         string
 	numberOfKeys int
 	keepers      []string
@@ -48,6 +50,9 @@ type options struct {
 const (
 	oFile         string = "file"
 	oSalt         string = "salt"
+	oPFK          string = "pfk"
+	oPassword     string = "password"
+	oRandom       string = "random"
 	oSave         string = "save"
 	oCall         string = "call"
 	oNumberOfKeys string = "keys"
@@ -68,8 +73,21 @@ const (
 )
 
 func main() {
+
 	cli.AppHelpTemplate = fmt.Sprintf(`%s
-Dedicated to the memory of Maximilian Kolbe (SP3RN) 08JAN1894-14AUG1941.
+Salt (--salt or KRYPTO_SALT environment variable) must be a hex encoded string
+decoded to at least 32 bytes. Beware! If you misplace the salt you will not be
+able to decrypt the persistence file even if you have the passphrase.
+
+Persistence file key (--pfk or the KRYPTO_PFK environment variable) must be a
+hex encoded string decoded to 32 bytes. Please note this is a string type that
+can not be wiped before exiting the program and may remain in memory. The
+default password-based interactive method is the recommended method.
+
+The --password option (or KRYPTO_PASSWORD environment variable) should be
+avoided as it is inherently insecure.
+
+KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 
 `, cli.AppHelpTemplate)
 
@@ -93,15 +111,25 @@ Dedicated to the memory of Maximilian Kolbe (SP3RN) 08JAN1894-14AUG1941.
 			&cli.StringFlag{
 				Name:    oFile,
 				Aliases: []string{"f"},
-				EnvVars: []string{"KRYPTO431_FILE"},
-				Value:   krypto431.DefaultSaveFile,
+				EnvVars: []string{"KRYPTO_FILE"},
+				Value:   krypto431.DefaultPersistence,
 				Usage:   "Storage file for persisting keys and messages",
 			},
 			&cli.StringFlag{
 				Name:    oSalt,
-				EnvVars: []string{"KRYPTO431_SALT"},
+				EnvVars: []string{"KRYPTO_SALT"},
 				Value:   krypto431.DefaultSalt,
-				Usage:   "Custom salt. Must be a hex encoded string decoded to at least 32 bytes\nBeware! If you misplace this salt you will not be able to decrypt\nthe save-file even if you have the passphrase",
+				Usage:   "Custom hex-encoded salt",
+			},
+			&cli.StringFlag{
+				Name:    oPFK,
+				EnvVars: []string{"KRYPTO_PFK"},
+				Usage:   "Supply your own persistence file key (PFK)",
+			},
+			&cli.StringFlag{
+				Name:    oPassword,
+				EnvVars: []string{"KRYPTO_PASSWORD"},
+				Usage:   "Insecurely supply clear-text password to derive persistence key (avoid)",
 			},
 		},
 		Commands: []*cli.Command{
@@ -239,7 +267,7 @@ Dedicated to the memory of Maximilian Kolbe (SP3RN) 08JAN1894-14AUG1941.
 					&cli.BoolFlag{
 						Name:    oYes,
 						Aliases: []string{"y"},
-						Usage:   "Force option, answer yes on questions (non-interactive)",
+						Usage:   "Force option, answer yes on questions",
 						Value:   false,
 					},
 				},
@@ -284,13 +312,15 @@ Dedicated to the memory of Maximilian Kolbe (SP3RN) 08JAN1894-14AUG1941.
 
 	err := app.Run(os.Args)
 	if err != nil {
-		fatalf("ERROR: %v", err)
+		fatalf("Error: %v", err)
 	}
 }
 
 func initialize(c *cli.Context) error {
 	o := &options{
-		saveFile:     c.String(oFile),
+		persistence:  c.String(oFile),
+		salt:         c.String(oSalt),
+		pfk:          c.String(oPFK),
 		yes:          c.Bool(oYes),
 		call:         c.String(oCall),
 		numberOfKeys: c.Int(oNumberOfKeys),
@@ -428,15 +458,27 @@ func initialize(c *cli.Context) error {
 		o.groupSize = answers.GroupSize
 	}
 
-	k := krypto431.New(krypto431.WithSaveFile(o.saveFile),
+	k := krypto431.New(krypto431.WithPersistence(o.persistence),
 		krypto431.WithInteractive(true),
 		krypto431.WithKeyLength(o.keyLength),
 		krypto431.WithGroupSize(o.groupSize),
 		krypto431.WithKeyColumns(o.keyColumns),
 		krypto431.WithColumns(o.columns),
 		krypto431.WithCallSign(o.call),
-		krypto431.WithOverwriteSaveFileIfExists(o.yes),
+		krypto431.WithOverwritePersistenceIfExists(o.yes),
 	)
+
+	if c.IsSet(oPFK) {
+		err := k.SetKeyFromString(o.pfk)
+		if err != nil {
+			return err
+		}
+	} else if c.IsSet(oSalt) {
+		err := k.SetSaltFromString(o.salt)
+		if err != nil {
+			return err
+		}
+	}
 
 	err := k.Assert()
 	if err != nil {
@@ -445,7 +487,7 @@ func initialize(c *cli.Context) error {
 
 	if o.numberOfKeys > 0 {
 		if o.numberOfKeys > 5000 {
-			fmt.Printf("Generating %d keys", o.numberOfKeys)
+			fmt.Printf("Generating %d keys"+LineBreak, o.numberOfKeys)
 		}
 		err := k.GenerateKeys(o.numberOfKeys, o.keepers...)
 		if err != nil {
@@ -461,21 +503,22 @@ func initialize(c *cli.Context) error {
 
 func keys(c *cli.Context) error {
 	o := &options{
-		saveFile:     c.String(oFile),
+		persistence:  c.String(oFile),
+		salt:         c.String(oSalt),
 		listItems:    c.Bool(oList),
-		exportItems:  c.String(oExport),
-		importItems:  c.String(oImport),
-		deleteItems:  c.Bool(oDelete),
 		numberOfKeys: c.Int(oNumberOfKeys),
+		deleteItems:  c.Bool(oDelete),
+		importItems:  c.String(oImport),
+		exportItems:  c.String(oExport),
 		keepers:      c.StringSlice(oKeepers),
-
-		all:    c.Bool(oAll),
-		used:   c.Bool(oUsed),
-		unused: c.Bool(oUnused),
-		yes:    c.Bool(oYes),
+		and:          c.Bool(oAnd),
+		all:          c.Bool(oAll),
+		used:         c.Bool(oUsed),
+		unused:       c.Bool(oUnused),
+		yes:          c.Bool(oYes),
 	}
 
-	k := krypto431.New(krypto431.WithSaveFile(o.saveFile))
+	k := krypto431.New(krypto431.WithPersistence(o.persistence))
 	err := k.Load()
 	if err != nil {
 		return err
@@ -495,10 +538,10 @@ func keys(c *cli.Context) error {
 }
 
 func generateKeys(c *cli.Context) error {
-	saveFile := c.String("file")
+	persistence := c.String("file")
 	numberOfKeys := c.Int("keys")
 	keepers := c.StringSlice("keepers")
-	k := krypto431.New(krypto431.WithSaveFile(saveFile))
+	k := krypto431.New(krypto431.WithPersistence(persistence))
 	err := k.Load()
 	if err != nil {
 		return err
@@ -516,17 +559,17 @@ func generateKeys(c *cli.Context) error {
 }
 
 func listKeys(c *cli.Context) error {
-	saveFile := c.String("file")
+	persistence := c.String("file")
 	keepers := krypto431.VettedKeepers(c.StringSlice("keepers")...)
 	and := c.Bool("and")
 	all := c.Bool("all")
 	unusedOnly := c.Bool("unused")
 	usedOnly := c.Bool("used")
 
-	k := krypto431.New(krypto431.WithSaveFile(saveFile), krypto431.WithInteractive(true))
+	k := krypto431.New(krypto431.WithPersistence(persistence), krypto431.WithInteractive(true))
 	err := k.Load()
 	if err != nil {
-		return fmt.Errorf("unable to load %s: %w", saveFile, err)
+		return fmt.Errorf("unable to load %s: %w", persistence, err)
 	}
 
 	sv := fmt.Sprintf("%%-%ds", k.GroupSize+1)
@@ -626,8 +669,8 @@ func receiveMessage(c *cli.Context) error {
 }
 
 func dev(c *cli.Context) error {
-	saveFile := c.String("file")
-	k := krypto431.New(krypto431.WithSaveFile(saveFile))
+	persistence := c.String("file")
+	k := krypto431.New(krypto431.WithPersistence(persistence))
 	err := k.Load()
 	if err != nil {
 		return err
@@ -664,3 +707,51 @@ func dev(c *cli.Context) error {
 
 	return nil
 }
+
+// Command generates a random persistence file key (PFK) for use as perhaps an
+// environment variable or inside a key file (CLI supports both).
+func generatePFK(c *cli.Context) error {
+	o := &options{
+		salt:     c.String(oSalt),
+		password: c.String(oPassword),
+		random:   c.Bool(oRandom),
+	}
+	k := krypto431.New()
+	if c.IsSet(oSalt) {
+		err := k.SetSaltFromString(o.salt)
+		if err != nil {
+			return err
+		}
+	}
+	if o.random {
+		// Generate a random PFK...
+		fmt.Println(krypto431.GeneratePFK())
+	} else {
+		// Derive key from a password/passphrase...
+		if c.IsSet(oPassword) {
+			// A password has been supplied in clear-text, warning has already been
+			// issued in the help text so just use it...
+			pwd := []byte(o.password)
+			err := k.DeriveKeyFromPassword(&pwd)
+			if err != nil {
+				return err
+			}
+			fmt.Println(k.GetPFKString())
+		} else {
+			// Neither the random option or password has been supplied, ask for a
+			// password/passphrase...
+			pwd, err := krypto431.AskAndConfirmPassword(krypto431.MinimumPasswordLength)
+			if err != nil {
+				return err
+			}
+			err = k.DeriveKeyFromPassword(pwd)
+			if err != nil {
+				return err
+			}
+			fmt.Println(k.GetPFKString())
+		}
+	}
+	return nil
+}
+
+//func loadPersistence(file string, salt string, key string)

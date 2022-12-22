@@ -306,6 +306,8 @@ func (state *codecState) encodeCharacter(input *rune, output *[]rune) error {
 	return nil
 }
 
+// decodeCharacter decodes a rune and appends plain text to the output rune
+// slice and/or sets the state for further processing by the calling function.
 func (state *codecState) decodeCharacter(input *rune, output *[]rune) error {
 	if *input < rune('A') || *input > rune('Z') {
 		return ErrInvalidCoding
