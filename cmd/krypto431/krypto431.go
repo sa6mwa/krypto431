@@ -90,13 +90,13 @@ func main() {
 
 	cli.AppHelpTemplate = fmt.Sprintf(`%s
 Salt (--salt or KRYPTO_SALT environment variable) must be a hex encoded string
-decoded to at least 32 bytes. Beware! If you misplace the salt you will not be
-able to decrypt the persistence file even if you have the passphrase.
+of at least 32 bytes after decoding. Beware! If you misplace the salt you will
+not be able to decrypt the persistence file even if you have the passphrase.
 
-Persistence file key (--pfk or the KRYPTO_PFK environment variable) must be a
-hex encoded string decoded to 32 bytes. Please note, this is a string type that
-can not be wiped before exiting the program and may remain in memory. The
-default password-based interactive method is the recommended method.
+Persistence file key (--pfk or KRYPTO_PFK environment variable) must be a hex
+encoded string of exactly 32 bytes after decoding. Please note, this is a string
+type that can not be wiped before exiting the program and may remain in memory.
+The default password-based interactive method is the recommended method.
 
 The --password option (or KRYPTO_PASSWORD environment variable) should be
 avoided as it is inherently insecure.
