@@ -28,12 +28,10 @@ const (
 )
 
 var (
-	RepeatPromptSuffix      string = "(repeat) "
-	PasswordPrompt          string = "Enter encryption key: "
-	PasswordPromptRepeat    string = PasswordPrompt + RepeatPromptSuffix
-	OldPasswordPrompt       string = "Enter old encryption key: "
-	NewPasswordPrompt       string = "Enter new encryption key: "
-	NewPasswordPromptRepeat string = NewPasswordPrompt + RepeatPromptSuffix
+	RepeatPromptSuffix  string = "(repeat) "
+	EncryptionPrompt    string = "Enter encryption key: "
+	DecryptionPrompt    string = "Enter decryption key: "
+	NewEncryptionPrompt string = "Enter new encryption key: "
 )
 
 var (
@@ -74,6 +72,11 @@ func (k *Krypto431) GetPFK() *[]byte {
 	return k.persistenceKey
 }
 
+// Similar to GetPFK, but return pointer to the salt.
+func (k *Krypto431) GetSalt() *[]byte {
+	return k.salt
+}
+
 // GetPFKString (yes, it's Pascal-case) returns a hex-encoded string
 // representation of the persistence file key (or empty if there is no PFK in
 // this instance). Function exists as the persistenceKey field is not exported.
@@ -82,6 +85,68 @@ func (k *Krypto431) GetPFKString() string {
 		return ""
 	}
 	return hex.EncodeToString(*k.persistenceKey)
+}
+
+// Similar to GetPFKString, but return a hex-encoded string of the salt.
+func (k *Krypto431) GetSaltString() string {
+	if k.salt == nil {
+		return ""
+	}
+	return hex.EncodeToString(*k.salt)
+}
+
+// Takes salt from a hex encoded string, converts it into a byte slice and sets
+// it as the instance's salt for the password-based key derivative function used
+// in Load() and Save(). Beware! If you loose the salt you used for encrypting
+// your persistance-file it will be practically impossible to decrypt it even if
+// you know the password.
+func (k *Krypto431) SetSaltFromString(salt string) error {
+	byteSalt, err := hex.DecodeString(salt)
+	if err != nil {
+		return err
+	}
+	if len(byteSalt) < MinimumSaltLength {
+		WipeBytes(&byteSalt)
+		return ErrTooShortSalt
+	}
+	k.salt = &byteSalt
+	return nil
+}
+
+// Takes persistence file key (PFK) from a hex encoded string (from perhaps
+// GeneratePFK()), converts it into a byte slice and sets it as the instance's
+// PFK which will override the password-based key derivative function and the
+// use of a salt. The key must be 32 bytes long (64 character long hex encoded
+// string). GeneratePFK() is available to generate a new random persistence file
+// key and return a hex encoded string. Beware that strings are immutable in Go
+// which means the internal wipe functions can not be used to clear this
+// sensitive string after closing or wiping the instance. The default
+// password-based method use byte or rune slices which are (or can be) wiped in
+// an attempt not to leave sensitive data around in memory after the program
+// exits.
+func (k *Krypto431) SetKeyFromString(key string) error {
+	byteKey, err := hex.DecodeString(key)
+	if err != nil {
+		return err
+	}
+	if len(byteKey) != 32 {
+		WipeBytes(&byteKey)
+		return ErrInvalidPFK
+	}
+	k.persistenceKey = &byteKey
+	return nil
+}
+
+// Similar to SetKeyFromString() except it derives the key from a passphrase via
+// the PBKDF2 function DeriveKeyFromPassword(). The instance's configured salt
+// is used and need to be set before calling this function.
+func (k *Krypto431) SetKeyFromPassword(password string) error {
+	byteKey := []byte(password)
+	err := k.DeriveKeyFromPassword(&byteKey)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // AskForPassword prompts the user for a password/passphrase and returns a byte
@@ -126,15 +191,15 @@ func AskForPassword(prompt string, minimumLength int) *[]byte {
 
 // Asks for password confirmation. Returns error if passwords don't match or a
 // byte slice pointer if they do.
-func AskAndConfirmPassword(minimumLength int) (*[]byte, error) {
+func AskAndConfirmPassword(prompt string, minimumLength int) (*[]byte, error) {
 	var pwd1 *[]byte
 	var pwd2 *[]byte
 	for {
-		pwd1 = AskForPassword(PasswordPrompt, minimumLength)
+		pwd1 = AskForPassword(prompt, minimumLength)
 		if pwd1 == nil {
 			return nil, ErrPasswordInput
 		}
-		pwd2 = AskForPassword(PasswordPromptRepeat, 0)
+		pwd2 = AskForPassword(prompt+RepeatPromptSuffix, 0)
 		if pwd2 == nil {
 			return nil, ErrPasswordInput
 		}
@@ -179,10 +244,13 @@ func GeneratePFK() string {
 	if err != nil {
 		panic(err)
 	}
+
 	return hex.EncodeToString(key)
 }
 
-// Krypto431_Save persists a Krypto431 instance to a file. The output file is a gzipped GOB (Go Binary) which is XSalsa20Poly1305 encrypted using a
+// Krypto431_Save persists a Krypto431 instance to file. The output file is a
+// gzipped GOB (Go Binary) which is XSalsa20Poly1305 encrypted using a 32 byte
+// key set via DeriveKeyFromPassword(), SetKeyFromString() or WithKey().
 func (k *Krypto431) Save() error {
 	if len(k.persistence) == 0 {
 		return ErrNoPersistence
@@ -225,7 +293,7 @@ func (k *Krypto431) Save() error {
 	// Ask for password if instance key is empty and mode is interactive, fail otherwise.
 	if k.persistenceKey == nil {
 		if k.interactive {
-			pwd, err := AskAndConfirmPassword(MinimumPasswordLength)
+			pwd, err := AskAndConfirmPassword(EncryptionPrompt, MinimumPasswordLength)
 			if err != nil {
 				return err
 			}
@@ -263,6 +331,8 @@ func (k *Krypto431) Save() error {
 	return nil
 }
 
+// Krypto431_Load() loads a Krypto431 instance from the configured persistence
+// file (k.persistence). Only exported fields will be populated.
 func (k *Krypto431) Load() error {
 	if len(k.persistence) == 0 {
 		return ErrNoPersistence
@@ -289,7 +359,7 @@ func (k *Krypto431) Load() error {
 	// Persistence file exists, ask for password if instance key is empty.
 	if k.persistenceKey == nil {
 		if k.interactive {
-			pwd := AskForPassword(PasswordPrompt, MinimumPasswordLength)
+			pwd := AskForPassword(DecryptionPrompt, MinimumPasswordLength)
 			if pwd == nil {
 				return ErrPasswordInput
 			}

@@ -511,7 +511,9 @@ type Option func(k *Krypto431)
 
 // WithKey overrides deriving the encryption key for the persistance-file from a
 // password by using the key directly. Must be 32 bytes long. Beware! Underlying
-// byte slice will be wiped when closing or wiping the Krypto431 instance.
+// byte slice will be wiped when closing or wiping the Krypto431 instance, but
+// the New() function returns a reference not a pointer meaning there could
+// still be a copy of this key in memory after wiping.
 func WithKey(key *[]byte) Option {
 	if key == nil || len(*key) != 32 {
 		return func(k *Krypto431) {
@@ -524,8 +526,9 @@ func WithKey(key *[]byte) Option {
 }
 
 // As WithKey, but takes a string and attempts to hex decode it into a byte
-// slice. Not recommended to use as it doesn't fail on error, just silently nils
-// the key. Use SetKeyFromString() on the instance after New() instead.
+// slice. Not recommended to use as it doesn't fail on error just nils the key
+// and leaves memory traces that can not be wiped. Use SetKeyFromString() on the
+// instance after New() instead.
 func WithKeyString(hexEncodedString string) Option {
 	nilKeyFunc := func(k *Krypto431) {
 		k.persistenceKey = nil
@@ -651,46 +654,10 @@ func (k *Krypto431) Assert() error {
 	return nil
 }
 
-// Takes salt from a hex encoded string, converts it into a byte slice and sets
-// it as the instance's salt for the password-based key derivative function used
-// in Load() and Save(). Beware! If you loose the salt you used for encrypting
-// your persistance-file it will be practically impossible to decrypt it even if
-// you know the password.
-func (k *Krypto431) SetSaltFromString(salt string) error {
-	byteSalt, err := hex.DecodeString(salt)
-	if err != nil {
-		return err
-	}
-	if len(byteSalt) < MinimumSaltLength {
-		WipeBytes(&byteSalt)
-		return ErrTooShortSalt
-	}
-	k.salt = &byteSalt
-	return nil
-}
-
-// Takes persistence file key (PFK) from a hex encoded string (from perhaps
-// GeneratePFK()), converts it into a byte slice and sets it as the instance's
-// PFK which will override the password-based key derivative function and the
-// use of a salt. The key must be 32 bytes long (64 character long hex encoded
-// string). GeneratePFK() is available to generate a new random persistence file
-// key and return a hex encoded string. Beware that strings are immutable in Go
-// which means the internal wipe functions can not be used to clear this
-// sensitive string after closing or wiping the instance. The default
-// password-based method use byte or rune slices which are (or can be) wiped in
-// an attempt not to leave sensitive data around in memory after the program
-// exits.
-func (k *Krypto431) SetKeyFromString(key string) error {
-	byteKey, err := hex.DecodeString(key)
-	if err != nil {
-		return err
-	}
-	if len(byteKey) != 32 {
-		WipeBytes(&byteKey)
-		return ErrInvalidPFK
-	}
-	k.persistenceKey = &byteKey
-	return nil
+// SetInteractive is provided to set the interactive non-exported field in an
+// instance (true=on, false=off).
+func (k *Krypto431) SetInteractive(state bool) {
+	k.interactive = state
 }
 
 // Close is an alias for Krypto431.Wipe()
