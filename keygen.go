@@ -3,6 +3,7 @@ package krypto431
 import (
 	"fmt"
 	"math"
+	"os"
 
 	"github.com/sa6mwa/krypto431/crand"
 )
@@ -41,7 +42,7 @@ func (r *Krypto431) NewKey(keepers ...string) *[]rune {
 		if !r.ContainsKeyId(&key.Id) {
 			break
 		}
-		fmt.Printf("Key %s already exist, retrying..."+LineBreak, string(key.Id))
+		fmt.Fprintf(os.Stderr, "Key %s already exist, retrying..."+LineBreak, string(key.Id))
 		/*
 			 		// 2 next lines for debugging, will be removed
 					_, fn, line, _ := runtime.Caller(1)

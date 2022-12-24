@@ -162,7 +162,7 @@ func AskForPassword(prompt string, minimumLength int) *[]byte {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		for _ = range ch {
+		for range ch {
 			fmt.Fprintln(os.Stderr, "caught interrupt, exiting")
 			term.Restore(fd, oldState)
 			os.Exit(1)
@@ -203,7 +203,7 @@ func AskAndConfirmPassword(prompt string, minimumLength int) (*[]byte, error) {
 		if pwd2 == nil {
 			return nil, ErrPasswordInput
 		}
-		if bytes.Compare(*pwd1, *pwd2) == 0 {
+		if bytes.Equal(*pwd1, *pwd2) {
 			WipeBytes(pwd2)
 			break
 		}
@@ -314,7 +314,7 @@ func (k *Krypto431) Save() error {
 	// Krypto431 persistence files are encrypted, gzipped GOB files.
 	encrypter, err := stream.NewEncryptedStream(f, &stream.Config{
 		Cipher:          stream.NewXSalsa20Poly1305Cipher((*[32]byte)(*k.persistenceKey)),
-		SequentialNonce: true,
+		SequentialNonce: false, // The key is the same and will leak if nonce is sequential.
 		Initiator:       true,
 	})
 	if err != nil {
@@ -380,7 +380,7 @@ func (k *Krypto431) Load() error {
 	defer f.Close()
 	decrypter, err := stream.NewEncryptedStream(f, &stream.Config{
 		Cipher:          stream.NewXSalsa20Poly1305Cipher((*[32]byte)(*k.persistenceKey)),
-		SequentialNonce: true,
+		SequentialNonce: false, // The key is the same and will leak if nonce is sequential.
 		Initiator:       false,
 	})
 	if err != nil {

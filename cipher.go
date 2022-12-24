@@ -510,8 +510,7 @@ func (t *Message) EnrichWithKey() error {
 		return nil
 	}
 
-	var designatedKey *Key
-	designatedKey = t.instance.FindKey(t.Recipients...)
+	designatedKey := t.instance.FindKey(t.Recipients...)
 	if designatedKey == nil {
 		if len(t.Recipients) == 0 {
 			return errors.New("did not find an anonymous key (a key without keepers)")

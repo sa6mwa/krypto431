@@ -1,6 +1,6 @@
 NAME = krypto431
 MODULE = github.com/sa6mwa/krypto431
-VERSION = $(shell git describe --tags --abbrev=0 2>/dev/null || echo 0)
+VERSION = $(shell git describe --tags --abbrev=0 2>/dev/null || echo v0 | sed 's/^v//')
 DESTDIR = /usr/local/bin
 SRC = $(MODULE)/cmd/$(NAME)
 GO = CGO_ENABLED=0 go

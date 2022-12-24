@@ -41,6 +41,12 @@ func RunesToStrings(runes *[][]rune) (stringSlice []string) {
 	return
 }
 
+// Wrapper to strings.Join for a slice pointer of rune slices. Returns a string
+// with comma without space as delimiter between items.
+func JoinRunesToString(runes *[][]rune) string {
+	return strings.Join(RunesToStrings(runes), ",")
+}
+
 // Generic function to vet one or more keeper strings, comma-separated or not.
 func VettedKeepers(keepers ...string) (vettedKeepers [][]rune) {
 	for i := range keepers {

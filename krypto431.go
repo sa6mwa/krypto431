@@ -94,7 +94,7 @@ type Krypto431 struct {
 // Key struct holds a key. Keepers is a list of callsigns or other identifiers
 // that have access to this key (and can use it for encryption/decryption). The
 // proper procedure is to share the key with it's respective keeper(s). By
-// default, all your callsigns (MyCallSigns) will be appended to the Keepers
+// default, all your call-signs (MyCallSigns) will be appended to the Keepers
 // slice.
 type Key struct {
 	Id       []rune   `json:",omitempty"`
