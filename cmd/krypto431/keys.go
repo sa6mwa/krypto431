@@ -11,10 +11,8 @@ import (
 var (
 	// TODO: In the future, use Go template to format this kind of output.
 	// Id Keepers Created Expires Used
-	ListTemplate string = "%05s"
+	ListTemplate string = "%-5s"
 )
-
-
 
 func keys(c *cli.Context) error {
 	o := getOptions(c)
@@ -34,8 +32,6 @@ func keys(c *cli.Context) error {
 
 		return nil
 	}
-
-
 
 	// generate new keys is also a singleton
 	if c.IsSet(oGenerate) && o.generate {

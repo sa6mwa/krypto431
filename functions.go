@@ -1,10 +1,46 @@
 package krypto431
 
 import (
+	"errors"
+	"math"
 	"strings"
 )
 
 // Functions not assigned to methods of more general use likely end up here.
+
+// Returns a rune slice where each group is separated by a space. If columns is
+// above 0 the function will insert a line break instead of a space before
+// extending beyond that column length. Don't forget to Wipe(myRuneSlice) when
+// you are done!
+func groups(input *[]rune, groupsize int, columns int) (*[]rune, error) {
+	if input == nil {
+		return nil, ErrNilPointer
+	}
+	if groupsize <= 0 {
+		return nil, errors.New("groupsize must be above 0")
+	}
+	output := make([]rune, 0, int(math.Ceil(float64(len(*input))/float64(groupsize)))*(groupsize+1))
+	runeCount := 0
+	outCount := 0
+	for i := 0; i < len(*input); i++ {
+		output = append(output, (*input)[i])
+		outCount++
+		runeCount++
+		if runeCount == groupsize {
+			if i != len(*input)-1 {
+				if columns > 0 && outCount >= columns-groupsize-1 {
+					output = append(output, []rune(LineBreak)...)
+					outCount = 0
+				} else {
+					output = append(output, rune(' '))
+					outCount++
+				}
+			}
+			runeCount = 0
+		}
+	}
+	return &output, nil
+}
 
 // AllNeedlesInHaystack returns true is all needles can be found in the
 // haystack, but if one slice in the haystack is a star (*) it will always

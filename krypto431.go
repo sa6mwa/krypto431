@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math"
-	"strings"
 	"sync"
 
 	"github.com/sa6mwa/dtg"
@@ -288,71 +286,6 @@ func (k *Key) ZeroWipe() error {
 	}
 	k.Id = nil
 	return nil
-}
-
-// KeyLength() returns the length of this key instance.
-func (k *Key) KeyLength() int {
-	return len(k.Runes)
-}
-
-// Returns a rune slice where each group is separated by a space. If columns is
-// above 0 the function will insert a line break instead of a space before
-// extending beyond that column length. Don't forget to Wipe(myRuneSlice) when
-// you are done!
-func groups(input *[]rune, groupsize int, columns int) (*[]rune, error) {
-	if input == nil {
-		return nil, ErrNilPointer
-	}
-	if groupsize <= 0 {
-		return nil, errors.New("groupsize must be above 0")
-	}
-	output := make([]rune, 0, int(math.Ceil(float64(len(*input))/float64(groupsize)))*(groupsize+1))
-	runeCount := 0
-	outCount := 0
-	for i := 0; i < len(*input); i++ {
-		output = append(output, (*input)[i])
-		outCount++
-		runeCount++
-		if runeCount == groupsize {
-			if i != len(*input)-1 {
-				if columns > 0 && outCount >= columns-groupsize-1 {
-					output = append(output, []rune(LineBreak)...)
-					outCount = 0
-				} else {
-					output = append(output, rune(' '))
-					outCount++
-				}
-			}
-			runeCount = 0
-		}
-	}
-	return &output, nil
-}
-
-// Groups for keys return a rune slice where each number of GroupSize runes are
-// separated by a space. Don't forget to Wipe() this slice when you are done!
-func (k *Key) Groups() (*[]rune, error) {
-	return groups(&k.Runes, k.instance.GroupSize, 0)
-}
-
-// Groups for messages return a rune slice where each group (GroupSize) is
-// separated by space. Don't forget to Wipe() this slice when you are done!
-func (t *Message) Groups() (*[]rune, error) {
-	// There is no need to group the Message (non-encoded) field.
-	return groups(&t.CipherText, t.instance.GroupSize, 0)
-}
-
-// GroupsBlock returns a string representation of the key where each group is
-// separated by a space and new lines if the block is longer than
-// Krypto431.Columns (or defaultColumns). Don't forget to Wipe(b []rune) this
-// slice when you are done!
-func (k *Key) GroupsBlock() (*[]rune, error) {
-	return groups(&k.Runes, k.instance.GroupSize, k.instance.KeyColumns)
-}
-
-// GroupsBlock for Message
-func (t *Message) GroupsBlock() (*[]rune, error) {
-	return groups(&t.CipherText, t.instance.GroupSize, t.instance.Columns)
 }
 
 // Wipe overwrites key, plaintext and ciphertext with random runes or zeroes.
@@ -686,57 +619,3 @@ func (k *Krypto431) Wipe() {
 	// wipe salt
 	WipeBytes(k.salt)
 }
-
-// NewTextMessage() is a variadic function where first argument is the message,
-// second is a comma-separated list with recipients, third a key id to override
-// the key finder function and use a specific key (not marked "used"). First
-// argument is mandatory, rest are optional.
-func (k *Krypto431) NewTextMessage(msg ...string) (err error) {
-	// 1st arg = message as a utf8 string (mandatory)
-	// 2nd arg = recipients as a comma-separated list (optional)
-	// 3rd arg = key id, overrides the key finder function (optional)
-
-	if len(msg) == 0 {
-		return errors.New("must at least provide the message text (first argument)")
-	}
-
-	message := Message{
-		PlainText: []rune(strings.TrimSpace(msg[0])),
-		instance:  k,
-	}
-
-	if len(message.PlainText) < 1 {
-		return errors.New("message is empty")
-	}
-
-	if len(msg) >= 2 {
-		recipients := strings.Split(msg[1], ",")
-		for i := range recipients {
-			message.Recipients = append(message.Recipients, []rune(strings.TrimSpace(strings.ToUpper(recipients[i]))))
-		}
-	}
-
-	if len(msg) >= 3 {
-		message.KeyId = []rune(strings.ToUpper(strings.TrimSpace(msg[2])))
-		if len(message.KeyId) != k.GroupSize {
-			return fmt.Errorf("key id \"%s\" must be %d characters long (the configured group size)", string(message.KeyId), k.GroupSize)
-		}
-	}
-
-	/* EnrichWithKey() need to be changed:
-	no err when key already present, and marked not used
-	no err when ciphertext is already present, just return
-	if there are no Recipients, find key that also has no Keepers (empty Keepers) / or my CS by default?
-	*/
-
-	err = message.Encipher()
-	if err != nil {
-		return err
-	}
-	k.Messages = append(k.Messages, message)
-	return nil
-}
-
-// TODO: Implement! :)
-
-//func (k *Krypto431) NewBinaryMessage() {}
