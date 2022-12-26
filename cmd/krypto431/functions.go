@@ -19,20 +19,26 @@ type options struct {
 	keepers      []string
 	keyLength    int
 	groupSize    int
+	expire       string
 	keyColumns   int
 	columns      int
 	listItems    bool
+	editItems    bool
 	exportItems  string
 	importItems  string
 	deleteItems  bool
 	or           bool
 	all          bool
+	valid        int
+	invalid      bool
+	expired      bool
+	compromised  bool
 	used         bool
 	unused       bool
 	yes          bool
 	change       string
-	generate     bool
-	generatesalt bool
+	generatePFK  bool
+	generateSalt bool
 	old          string
 	new          string
 	newsalt      string
@@ -51,18 +57,24 @@ const (
 	oKeepers      string = "keepers"
 	oKeyLength    string = "key-length"
 	oGroupSize    string = "groupsize"
+	oExpire       string = "expire"
 	oKeyColumns   string = "key-columns"
 	oColumns      string = "columns"
 	oList         string = "list"
+	oEdit         string = "edit"
 	oExport       string = "export"
 	oImport       string = "import"
 	oDelete       string = "delete"
 	oOr           string = "or"
 	oAll          string = "all"
+	oValid        string = "valid"
+	oInvalid      string = "invalid"
+	oExpired      string = "expired"
+	oCompromised  string = "compromised"
 	oUsed         string = "used"
 	oUnused       string = "unused"
 	oYes          string = "yes"
-	oGenerate     string = "gen-key"
+	oGeneratePFK  string = "gen-pfk"
 	oGenerateSalt string = "gen-salt"
 	oChange       string = "change"
 	oOld          string = "old"
@@ -84,20 +96,26 @@ func getOptions(c *cli.Context) options {
 		keepers:      c.StringSlice(oKeepers),
 		keyLength:    c.Int(oKeyLength),
 		groupSize:    c.Int(oGroupSize),
+		expire:       c.String(oExpire),
 		keyColumns:   c.Int(oKeyColumns),
 		columns:      c.Int(oColumns),
 		listItems:    c.Bool(oList),
+		editItems:    c.Bool(oEdit),
 		exportItems:  c.String(oExport),
 		importItems:  c.String(oImport),
 		deleteItems:  c.Bool(oDelete),
 		or:           c.Bool(oOr),
 		all:          c.Bool(oAll),
+		valid:        c.Int(oValid),
+		invalid:      c.Bool(oInvalid),
+		expired:      c.Bool(oExpired),
+		compromised:  c.Bool(oCompromised),
 		used:         c.Bool(oUsed),
 		unused:       c.Bool(oUnused),
 		yes:          c.Bool(oYes),
 		change:       c.String(oChange),
-		generate:     c.Bool(oGenerate),
-		generatesalt: c.Bool(oGenerateSalt),
+		generatePFK:  c.Bool(oGeneratePFK),
+		generateSalt: c.Bool(oGenerateSalt),
 		old:          c.String(oOld),
 		new:          c.String(oNew),
 		newsalt:      c.String(oNewSalt),

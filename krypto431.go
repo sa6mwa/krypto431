@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"strings"
 	"sync"
 
 	"github.com/sa6mwa/dtg"
@@ -14,6 +16,7 @@ import (
 // defaults, most are exported
 const (
 	useCrandWipe               bool   = true
+	MinimumCallSignLength      int    = 2
 	DefaultGroupSize           int    = 5
 	DefaultKeyLength           int    = 350 // 70 groups, 5 groups per row is 14 rows total
 	DefaultColumns             int    = 110
@@ -30,9 +33,9 @@ const (
 	MinimumSaltLength          int    = 32
 	MinimumPasswordLength      int    = 8
 	// Fixed salt for pbkdf2 derived keys. Can be changed using
-	// krypto431.New(krypto431.WithSalt(atLeast32characterSaltString)) when
-	// initiating a new instance. You can use GenerateSalt() to generate a new
-	// salt for use in WithSalt() and your UI program.
+	// krypto431.New(krypto431.WithSalt(hexEncodedSaltString)) when initiating a
+	// new instance. You can use GenerateSalt() to generate a new salt for use in
+	// WithSalt() and your UI program.
 	DefaultSalt string = "d14461856f830fc5a1f9ba1b845fae5f61c54767ded39cf943174e6869b44476"
 )
 
@@ -47,11 +50,13 @@ var (
 	ErrUnsupportedTable   = errors.New("character table not supported")
 	ErrOutOfKeys          = errors.New("can not encipher multi-key message, unable to find additional key(s)")
 	ErrNoCallSign         = errors.New("need to specify your call-sign")
+	ErrInvalidCallSign    = fmt.Errorf("invalid call-sign, should be at least %d characters long", MinimumCallSignLength)
 	ErrNoPersistence      = errors.New("missing file name for persisting keys, messages and settings")
 	ErrInvalidGroupSize   = errors.New("group size must be 1 or longer")
 	ErrKeyTooShort        = fmt.Errorf("key length must be %d characters or longer", MinimumSupportedKeyLength)
 	ErrTooNarrow          = fmt.Errorf("column width must be at least %d characters wide", MinimumColumnWidth)
 	ErrKeyColumnsTooShort = errors.New("key column width less than group size")
+	ErrFormatting         = errors.New("formatting error")
 )
 
 // Wiper interface (for Keys and Messages only). Not used internally in package.
@@ -69,10 +74,10 @@ type GroupFormatter interface {
 }
 
 // Krypto431 store generated keys, plaintext, ciphertext, callsign(s) and
-// configuration items. It is mandatory to populate MyCallSigns with at least
-// one call sign (something identifying yourself in message handling). It will
-// be converted to upper case. Mutex and persistance file (persistence) are not
-// exported meaning values will not be persisted to disk.
+// configuration items. CallSign is mandatory (something identifying yourself in
+// message handling). It will be converted to upper case. Mutex and persistance
+// file (persistence) are not exported meaning values will not be persisted to
+// disk.
 type Krypto431 struct {
 	mx                           *sync.Mutex
 	persistence                  string
@@ -80,28 +85,28 @@ type Krypto431 struct {
 	salt                         *[]byte
 	overwritePersistenceIfExists bool
 	interactive                  bool
-	GroupSize                    int       `json:",omitempty"`
-	KeyLength                    int       `json:",omitempty"`
-	Columns                      int       `json:",omitempty"`
-	KeyColumns                   int       `json:",omitempty"`
-	Keys                         []Key     `json:",omitempty"`
-	Messages                     []Message `json:",omitempty"`
-	MyCallSigns                  [][]rune  `json:",omitempty"`
+	GroupSize                    int
+	KeyLength                    int
+	Columns                      int
+	KeyColumns                   int
+	Keys                         []Key
+	Messages                     []Message
+	CallSign                     []rune
 }
 
-// Key struct holds a key. Keepers is a list of callsigns or other identifiers
+// Key struct holds a key. Keepers is a list of call-signs or other identifiers
 // that have access to this key (and can use it for encryption/decryption). The
-// proper procedure is to share the key with it's respective keeper(s). By
-// default, all your call-signs (MyCallSigns) will be appended to the Keepers
-// slice.
+// proper procedure is to share the key with it's respective keeper(s).
 type Key struct {
-	Id       []rune   `json:",omitempty"`
-	Runes    []rune   `json:",omitempty"`
-	Keepers  [][]rune `json:",omitempty"`
-	Expires  dtg.DTG
-	Created  dtg.DTG
-	Used     bool `json:",omitempty"`
-	instance *Krypto431
+	Id          []rune
+	Runes       []rune
+	Keepers     [][]rune
+	Created     dtg.DTG
+	Expires     dtg.DTG
+	Used        bool
+	Compromised bool
+	Comment     []rune
+	instance    *Krypto431
 }
 
 // Message holds plaintext and ciphertext. To encrypt, you need to populate the
@@ -119,12 +124,12 @@ type Key struct {
 // KeyId should be the first group in your received message.
 type Message struct {
 	DTG        dtg.DTG
-	GroupCount int      `json:",omitempty"`
-	KeyId      []rune   `json:",omitempty"`
-	PlainText  []rune   `json:",omitempty"`
-	Binary     []byte   `json:",omitempty"`
-	CipherText []rune   `json:",omitempty"`
-	Recipients [][]rune `json:",omitempty"`
+	GroupCount int
+	KeyId      []rune
+	PlainText  []rune
+	Binary     []byte
+	CipherText []rune
+	Recipients [][]rune
 	instance   *Krypto431
 }
 
@@ -257,14 +262,19 @@ func (k *Key) Wipe() error {
 
 // RandomWipe overwrites key with random runes.
 func (k *Key) RandomWipe() error {
-	runeSlices := []*[]rune{&k.Runes, &k.Id}
+	runeSlices := []*[]rune{&k.Runes, &k.Comment, &k.Id}
+	for i := range k.Keepers {
+		runeSlices = append(runeSlices, &k.Keepers[i])
+	}
 	for i := range runeSlices {
 		written, err := crand.ReadRunes(*runeSlices[i])
 		if err != nil || written != len(*runeSlices[i]) {
 			if err != nil {
-				log.Println(err.Error())
+				fmt.Fprintln(os.Stderr, err.Error())
 			}
-			log.Printf("ERROR, wrote %d runes, but expected to write %d", written, len(*runeSlices[i]))
+			if written != len(*runeSlices[i]) {
+				fmt.Fprintf(os.Stderr, "ERROR, wrote %d runes, but expected to write %d", written, len(*runeSlices[i]))
+			}
 			// zero-wipe rune slice instead...
 			for y := 0; y < len(*runeSlices[i]); y++ {
 				(*runeSlices[i])[y] = 0
@@ -281,6 +291,17 @@ func (k *Key) ZeroWipe() error {
 		k.Runes[i] = 0
 	}
 	k.Runes = nil
+	for x := range k.Keepers {
+		for i := 0; i < len(k.Keepers[x]); i++ {
+			k.Keepers[x][i] = 0
+		}
+		k.Keepers[x] = nil
+	}
+	k.Keepers = nil
+	for i := 0; i < len(k.Comment); i++ {
+		k.Comment[i] = 0
+	}
+	k.Comment = nil
 	for i := 0; i < len(k.Id); i++ {
 		k.Id[i] = 0
 	}
@@ -513,16 +534,10 @@ func WithSaltString(salt string) Option {
 
 func WithCallSign(cs string) Option {
 	return func(k *Krypto431) {
-		k.MyCallSigns = append(k.MyCallSigns, []rune(cs))
+		k.SetCallSign(cs)
 	}
 }
-func WithCallSigns(css ...string) Option {
-	return func(k *Krypto431) {
-		for i := range css {
-			k.MyCallSigns = append(k.MyCallSigns, []rune(css[i]))
-		}
-	}
-}
+
 func WithMutex(mu *sync.Mutex) Option {
 	return func(k *Krypto431) {
 		k.mx = mu
@@ -591,6 +606,16 @@ func (k *Krypto431) Assert() error {
 // instance (true=on, false=off).
 func (k *Krypto431) SetInteractive(state bool) {
 	k.interactive = state
+}
+
+// Validates and sets the instance's call-sign.
+func (k *Krypto431) SetCallSign(callsign string) error {
+	cs := []rune(strings.ToUpper(strings.TrimSpace(callsign)))
+	if len(cs) < MinimumCallSignLength {
+		return ErrInvalidCallSign
+	}
+	k.CallSign = cs
+	return nil
 }
 
 // Close is an alias for Krypto431.Wipe()

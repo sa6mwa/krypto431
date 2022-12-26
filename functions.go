@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math"
 	"strings"
+	"unicode"
 )
 
 // Functions not assigned to methods of more general use likely end up here.
@@ -43,8 +44,7 @@ func groups(input *[]rune, groupsize int, columns int) (*[]rune, error) {
 }
 
 // AllNeedlesInHaystack returns true is all needles can be found in the
-// haystack, but if one slice in the haystack is a star (*) it will always
-// return true. Intended to find Keepers of Keys where needles are
+// haystack. Intended to find Keepers of Keys where needles are
 // Message.Recipients and haystack is Key.Keepers.
 func AllNeedlesInHaystack(needles *[][]rune, haystack *[][]rune) bool {
 	if needles == nil || haystack == nil {
@@ -56,16 +56,30 @@ func AllNeedlesInHaystack(needles *[][]rune, haystack *[][]rune) bool {
 loop:
 	for i := range *needles {
 		for x := range *haystack {
-			if string((*haystack)[x]) == `*` {
-				return true
-			}
-			if string((*haystack)[x]) == string((*needles)[i]) {
+			if EqualRunes(&(*haystack)[x], &(*needles)[i]) {
 				continue loop
 			}
 		}
 		return false
 	}
 	return true
+}
+
+func AnyNeedleInHaystack(needles *[][]rune, haystack *[][]rune) bool {
+	if needles == nil || haystack == nil {
+		return false
+	}
+	if len(*needles) == 0 || len(*haystack) == 0 {
+		return false
+	}
+	for i := range *needles {
+		for x := range *haystack {
+			if EqualRunes(&(*haystack)[x], &(*needles)[i]) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Generic function to convert an array of rune slices (runes) into a string
@@ -77,16 +91,21 @@ func RunesToStrings(runes *[][]rune) (stringSlice []string) {
 	return
 }
 
-// Wrapper to strings.Join for a slice pointer of rune slices. Returns a string
-// with comma without space as delimiter between items.
-func JoinRunesToString(runes *[][]rune) string {
-	return strings.Join(RunesToStrings(runes), ",")
+// Wrapper to strings.Join for a pointer to slices of rune slices. Returns a
+// string with 'separator' as delimiter between items.
+func JoinRunesToString(runes *[][]rune, separator string) string {
+	return strings.Join(RunesToStrings(runes), separator)
 }
 
-// Generic function to vet one or more keeper strings, comma-separated or not.
+// Generic function to vet one or more keeper strings, comma/space-separated or
+// not. Returns a slice of rune slices with the keepers for use in e.g
+// Key.Keepers.
 func VettedKeepers(keepers ...string) (vettedKeepers [][]rune) {
+	f := func(c rune) bool {
+		return c == ',' || c == ' '
+	}
 	for i := range keepers {
-		subKeepers := strings.Split(keepers[i], ",")
+		subKeepers := strings.FieldsFunc(keepers[i], f)
 		for a := range subKeepers {
 			vettedKeeper := []rune(strings.ToUpper(strings.TrimSpace(subKeepers[a])))
 			if len(vettedKeeper) > 0 {
@@ -95,6 +114,11 @@ func VettedKeepers(keepers ...string) (vettedKeepers [][]rune) {
 		}
 	}
 	return
+}
+
+// VettedRecipients is an alias for VettedKeepers.
+func VettedRecipients(recipients ...string) [][]rune {
+	return VettedKeepers(recipients...)
 }
 
 // Function to compare two rune slices. Returns true if they are equal, false if
@@ -115,4 +139,59 @@ func EqualRunes(a *[]rune, b *[]rune) bool {
 		}
 	}
 	return true
+}
+
+// Same as EqualRunes, except EqualRunesFold is case-insensitive. Returns true
+// if they are equal fold, false if not.
+func EqualRunesFold(a *[]rune, b *[]rune) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	if len(*a) != len(*b) {
+		return false
+	}
+	for x := range *a {
+		if unicode.ToUpper((*a)[x]) != unicode.ToUpper((*b)[x]) {
+			return false
+		}
+	}
+	return true
+}
+
+// ColumnSizes calculates max length of each []rune in a slice of []rune slices.
+// Intended to be used to format multiple responses from Key.Digest() and
+// Message.Digest() for printing.
+func ColumnSizes(headerFields []string, rs [][][]rune) (columnSizes []int) {
+	for item := range rs {
+		for col := range rs[item] {
+			ilen := len(rs[item][col])
+			if len(headerFields) >= col {
+				hlen := len(headerFields[col])
+				if hlen > ilen {
+					ilen = hlen
+				}
+			}
+			if len(columnSizes) <= col {
+				columnSizes = append(columnSizes, ilen)
+			} else {
+				if columnSizes[col] < ilen {
+					columnSizes[col] = ilen
+				}
+			}
+		}
+	}
+	return
+}
+
+// Returns a copy of a rune slice.
+func RuneCopy(src *[]rune) []rune {
+	if src == nil {
+		return []rune{}
+	}
+	runeCopy := make([]rune, len(*src))
+	copy(runeCopy, *src)
+	return runeCopy
 }

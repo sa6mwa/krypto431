@@ -148,7 +148,7 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 				Action: managePFK,
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
-						Name:    oGenerate,
+						Name:    oGeneratePFK,
 						Aliases: []string{"g"},
 						Usage:   "Generate PFK for use with the --pfk global option or KRYPTO_PFK environment variable",
 					},
@@ -209,10 +209,18 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 						Value:   false,
 						Usage:   "List keys",
 					},
+					/*
+						&cli.BoolFlag{
+							Name:    oEdit,
+							Aliases: []string{"e"},
+							Value:   false,
+							Usage:   "Edit key(s)",
+						},
+					*/
 					&cli.IntFlag{
 						Name:    oNumberOfKeys,
 						Aliases: []string{"n"},
-						Usage:   "Number of new keys to generate",
+						Usage:   "Generate `n` number of new keys",
 						Value:   0,
 					},
 					&cli.BoolFlag{
@@ -223,18 +231,18 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 					},
 					&cli.StringFlag{
 						Name:    oImport,
-						Aliases: []string{"i"},
-						Usage:   "Import keys from file",
+						Aliases: []string{"I"},
+						Usage:   "Import keys from `file`",
 					},
 					&cli.StringFlag{
 						Name:    oExport,
-						Aliases: []string{"e"},
-						Usage:   "Export keys from main file to new file",
+						Aliases: []string{"E"},
+						Usage:   "Export keys from main persistence to new `file`",
 					},
 					&cli.StringSliceFlag{
 						Name:    oKeepers,
 						Aliases: []string{"k"},
-						Usage:   "Call-signs to keepers of keys (new and as filter), omit on new will assign key(s) to you",
+						Usage:   "Keepers of keys (new and as filter), omit on new will assign key(s) to you",
 					},
 					&cli.BoolFlag{
 						Name:  oOr,
@@ -243,8 +251,29 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 					},
 					&cli.BoolFlag{
 						Name:  oAll,
-						Usage: "Select all keys - list, import, export, delete (after confirmation)",
+						Usage: "Select keys with and without keepers (list/edit/import/export/delete after confirmation)",
 						Value: false,
+					},
+					&cli.IntFlag{
+						Name:  oValid,
+						Usage: "Select keys that do not expire within n `days` and are not compromised",
+						Value: 0,
+					},
+					&cli.BoolFlag{
+						Name:  oInvalid,
+						Usage: "Select keys that have expired or are compromised",
+						Value: false,
+					},
+					&cli.BoolFlag{
+						Name:  oExpired,
+						Usage: "Select keys that have expired",
+						Value: false,
+					},
+					&cli.BoolFlag{
+						Name:    oCompromised,
+						Aliases: []string{"C"},
+						Usage:   "Select keys that are compromised",
+						Value:   false,
 					},
 					&cli.BoolFlag{
 						Name:    oUsed,
@@ -266,7 +295,6 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 					},
 				},
 			},
-
 			{
 				Name:   "listkeys",
 				Usage:  "List keys",

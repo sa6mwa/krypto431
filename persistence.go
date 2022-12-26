@@ -95,6 +95,12 @@ func (k *Krypto431) GetSaltString() string {
 	return hex.EncodeToString(*k.salt)
 }
 
+// GetPersistence returns the non-exported persistence string (save-file) from
+// an instance.
+func (k *Krypto431) GetPersistence() string {
+	return k.persistence
+}
+
 // Takes salt from a hex encoded string, converts it into a byte slice and sets
 // it as the instance's salt for the password-based key derivative function used
 // in Load() and Save(). Beware! If you loose the salt you used for encrypting
@@ -371,7 +377,6 @@ func (k *Krypto431) Load() error {
 			return ErrNilPFK
 		}
 	}
-
 	// Load persisted data...
 	f, err = os.Open(k.persistence)
 	if err != nil {

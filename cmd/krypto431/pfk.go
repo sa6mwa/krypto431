@@ -10,17 +10,17 @@ import (
 // pfk command
 func managePFK(c *cli.Context) error {
 	o := getOptions(c)
-	if c.IsSet(oGenerate) && o.generate && c.IsSet(oGenerateSalt) && o.generatesalt {
-		return fmt.Errorf("can not use both --%s and --%s, suggestion: first salt, use as input to --%s global option when running pfk --%s", oGenerate, oGenerateSalt, oSalt, oGenerate)
+	if c.IsSet(oGeneratePFK) && o.generatePFK && c.IsSet(oGenerateSalt) && o.generateSalt {
+		return fmt.Errorf("can not use both --%s and --%s, suggestion: first salt, use as input to --%s global option when running pfk --%s", oGeneratePFK, oGenerateSalt, oSalt, oGeneratePFK)
 	}
 
-	if c.IsSet(oGenerate) && o.generate {
+	if c.IsSet(oGeneratePFK) && o.generatePFK {
 		err := generatePFK(c)
 		if err != nil {
 			return err
 		}
 		return nil
-	} else if c.IsSet(oGenerateSalt) && o.generatesalt {
+	} else if c.IsSet(oGenerateSalt) && o.generateSalt {
 		generateSalt()
 		return nil
 	} else if c.IsSet(oChange) {

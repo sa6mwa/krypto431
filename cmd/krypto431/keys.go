@@ -2,16 +2,12 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/sa6mwa/krypto431"
 	"github.com/urfave/cli/v2"
-)
-
-var (
-	// TODO: In the future, use Go template to format this kind of output.
-	// Id Keepers Created Expires Used
-	ListTemplate string = "%-5s"
 )
 
 func keys(c *cli.Context) error {
@@ -27,14 +23,79 @@ func keys(c *cli.Context) error {
 		return err
 	}
 
+	vettedKeepers := krypto431.VettedKeepers(o.keepers...)
+
 	// list keys is a singleton, exit after listing
 	if c.IsSet(oList) && o.listItems {
+		// First, ensure there are keys in this instance.
+		keys := len(k.Keys)
+		if keys == 0 {
+			fmt.Fprintf(os.Stderr, "There are no keys in %s."+LineBreak, k.GetPersistence())
+			return nil
+		}
+
+		header, lines := k.SummaryOfKeys(func(key *krypto431.Key) bool {
+			// Next is almost redundant as function selects all keys if no filters av been applied.
+			if o.all {
+				return true
+			}
+			if len(vettedKeepers) > 0 {
+				// List keys with keepers AND anonymous if --anonymous is given...
+				if o.or {
+					if !krypto431.AnyNeedleInHaystack(&vettedKeepers, &key.Keepers) {
+						return false
+					}
+				} else {
+					if !krypto431.AllNeedlesInHaystack(&vettedKeepers, &key.Keepers) {
+						return false
+					}
+				}
+			}
+			if o.invalid {
+				if key.Compromised || key.IsExpired() {
+					return false
+				}
+			}
+			if o.compromised && !key.Compromised {
+				return false
+			}
+			if o.used && !key.Used {
+				return false
+			}
+			if o.unused && key.Used {
+				return false
+			}
+			if c.IsSet(oValid) {
+				if key.Compromised {
+					return false
+				}
+				if !key.IsValid(time.Duration(o.valid) * 24 * time.Hour) {
+					return false
+				}
+			}
+			return true
+		})
+
+		if len(lines) == 0 {
+			plural := ""
+			if keys > 1 {
+				plural = "s"
+			}
+			fmt.Fprintf(os.Stderr, "No key out of %d key"+plural+" in %s matched select criteria."+LineBreak, keys, k.GetPersistence())
+			return nil
+		}
+
+		// Print lines of keys...
+		fmt.Println(strings.TrimRight(string(header), " "))
+		for i := range lines {
+			fmt.Println(strings.TrimRight(string(lines[i]), " "))
+		}
 
 		return nil
 	}
 
-	// generate new keys is also a singleton
-	if c.IsSet(oGenerate) && o.generate {
+	// generate new keys function is also a singleton
+	if c.IsSet(oNumberOfKeys) && o.numberOfKeys > 0 {
 		return nil
 	}
 

@@ -17,8 +17,12 @@ func (t *Message) Groups() (*[]rune, error) {
 // cipher text where each group is separated by a space or new line if a line
 // becomes longer than Krypto431.Columns (or DefaultColumns). Don't forget to
 // Wipe() this slice when you are done!
-func (t *Message) GroupsBlock() (*[]rune, error) {
-	return groups(&t.CipherText, t.instance.GroupSize, t.instance.Columns)
+func (m *Message) GroupsBlock() (*[]rune, error) {
+	return groups(&m.CipherText, m.instance.GroupSize, m.instance.Columns)
+}
+
+func (m *Message) JoinRecipients(separator string) string {
+	return JoinRunesToString(&m.Recipients, separator)
 }
 
 // NewTextMessage() is a variadic function where first argument is the message,

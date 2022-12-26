@@ -22,8 +22,8 @@ var (
 	// Y in 2nd = change key (followed by 5 character key after which the table is reset)
 
 	// Encoding uses two character tables (primary and secondary). NB! Any changes
-	// to the control characters in these tables need to be reflected in the
-	// encodeCharacter() and decodeCharacter() functions.
+	// to the control characters in these tables need to be reflected in functions
+	// encodeCharacter() and decodeCharacter().
 	// CharacterTablePrimary = `ABCDEFGHIJKLMNOP RSTUVWXY¤`,
 	// CharacterTableSecondary = `0123456789?-ÅÄÖ.Q,Z:+/¤¤¤¤`
 	CharacterTables [][]rune = [][]rune{

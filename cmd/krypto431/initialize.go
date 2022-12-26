@@ -132,7 +132,7 @@ func initialize(c *cli.Context) error {
 			tk := strings.Split(strings.TrimSpace(ik[i]), " ")
 			for t := range tk {
 				fk := strings.ToUpper(strings.TrimSpace(tk[t]))
-				if len(fk) > 0 {
+				if utf8.RuneCountInString(fk) > 0 {
 					o.keepers = append(o.keepers, fk)
 				}
 			}

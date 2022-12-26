@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"time"
 
 	"github.com/sa6mwa/krypto431/crand"
 )
@@ -27,10 +28,11 @@ func (k *Krypto431) ContainsKeyId(keyId *[]rune) bool {
 // variadic, comma-separated call-signs or a combination of both.
 func (k *Krypto431) NewKey(keepers ...string) *[]rune {
 	key := Key{
-		Id:       make([]rune, k.GroupSize),
-		Runes:    make([]rune, int(int(math.Ceil(float64(k.KeyLength)/float64(k.GroupSize)))*k.GroupSize)),
-		Used:     false,
-		instance: k,
+		Id:          make([]rune, k.GroupSize),
+		Runes:       make([]rune, int(int(math.Ceil(float64(k.KeyLength)/float64(k.GroupSize)))*k.GroupSize)),
+		Used:        false,
+		Compromised: false,
+		instance:    k,
 	}
 
 	key.Keepers = VettedKeepers(keepers...)
@@ -56,7 +58,7 @@ func (k *Krypto431) NewKey(keepers ...string) *[]rune {
 	return &key.Id
 }
 
-// GenerateKeys creates n amount of keys
+// GenerateKeys creates n amount of keys.
 func (k *Krypto431) GenerateKeys(n int, keepers ...string) error {
 	for i := 0; i < n; i++ {
 		_ = k.NewKey(keepers...)
@@ -77,8 +79,125 @@ func (k *Key) Groups() (*[]rune, error) {
 
 // GroupsBlock returns a string-as-rune-slice representation of the key where
 // each group is separated by a space or new line if a line becomes longer than
-// Krypto431.Columns (or DefaultColumns). Don't forget to Wipe(b []rune) this
-// slice when you are done!
+// Krypto431.KeyColumns (e.g DefaultKeyColumns). Don't forget to Wipe(b []rune)
+// this slice when you are done!
 func (k *Key) GroupsBlock() (*[]rune, error) {
 	return groups(&k.Runes, k.instance.GroupSize, k.instance.KeyColumns)
+}
+
+func (k *Key) JoinKeepers(separator string) string {
+	return JoinRunesToString(&k.Keepers, separator)
+}
+
+// Check if key is still valid or has expired, returns true if still valid,
+// false if not.
+func (k *Key) IsExpired() bool {
+	return time.Now().After(k.Expires.Time)
+}
+
+// Check if key is valid at least one day before expiring. Returns true if key
+// is OK, false if not.
+func (k *Key) IsValidOneDay() bool {
+	return k.IsValid(-24 * time.Hour)
+}
+
+// Check if key is valid d amount of time before expiring (e.g 24*time.Hour for
+// one day). Returns true if key does not expire within d time or false if it
+// does.
+func (k *Key) IsValid(d time.Duration) bool {
+	return time.Now().Add(-d).After(k.Expires.Time)
+}
+
+// Returns Yes if key is marked used, No if not.
+func (k *Key) UsedString() string {
+	if k.Used {
+		return "Yes"
+	}
+	return "No"
+}
+
+// Returns Yes if key is marked compromised, No if not.
+func (k *Key) CompromisedString() string {
+	if k.Compromised {
+		return "Yes"
+	}
+	return "No"
+}
+
+func (k *Krypto431) SummaryOfKeys(filterFunction func(key *Key) bool) (header []rune, lines [][]rune) {
+	var digests [][][]rune
+	defer func() {
+		for a := range digests {
+			for i := range digests[a] {
+				Wipe(&digests[a][i])
+			}
+			digests[a] = nil
+		}
+		digests = nil
+	}()
+	for i := range k.Keys {
+		if filterFunction(&k.Keys[i]) {
+			digests = append(digests, k.Keys[i].Digest())
+		}
+	}
+	if len(digests) > 0 {
+		columnHeader := []string{"ID", "KEEPERS", "CREATED", "EXPIRES", "USED", "COMPROMISED", "COMMENT"}
+		columnSizes := ColumnSizes(columnHeader, digests)
+		if len(columnSizes) != len(columnHeader) {
+			panic("wrong number of columns")
+		}
+		// Generate formatted header rune slice...
+		for i := range columnSizes {
+			if len(columnHeader) <= i {
+				continue
+			}
+			header = append(header, []rune(columnHeader[i])...)
+			if i < len(columnSizes)-1 {
+				padding := columnSizes[i] - len(columnHeader[i]) + 1
+				for x := 0; x < padding; x++ {
+					header = append(header, rune(' '))
+				}
+			}
+		}
+		// Populate lines with keys...
+		for row := range digests {
+			var line []rune
+			for col := range digests[row] {
+				if col >= len(columnSizes) {
+					continue
+				}
+				line = append(line, digests[row][col]...)
+				if col < len(digests[row])-1 {
+					padding := columnSizes[col] - len(digests[row][col]) + 1
+					for x := 0; x < padding; x++ {
+						line = append(line, rune(' '))
+					}
+				}
+			}
+			if len(line) > 0 {
+				lines = append(lines, line)
+			} else {
+				panic("empty line")
+			}
+		}
+	}
+	return
+}
+
+// Digest returns a slice of strings-as-rune-slices describing the key. Items in
+// the slice are ID, KEEPERS, CREATED, EXPIRES, USED (Y/N), COMPROMISED (Y/N),
+// COMMENT. The rune slices can be cleared with Wipe().
+func (k *Key) Digest() (digest [][]rune) {
+	digest = append(digest, RuneCopy(&k.Id))
+	if len(k.Keepers) > 0 {
+		digest = append(digest, []rune(k.JoinKeepers(",")))
+	} else {
+		digest = append(digest, []rune("Anonymous"))
+	}
+	digest = append(digest, []rune(k.Created.String()))
+	digest = append(digest, []rune(k.Expires.String()))
+	digest = append(digest, []rune(k.UsedString()))
+	digest = append(digest, []rune(k.CompromisedString()))
+	digest = append(digest, RuneCopy(&k.Comment))
+	return
 }
