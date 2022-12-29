@@ -123,13 +123,15 @@ type Key struct {
 // your instace's Keys slice it will be fetched from the database or fail. The
 // KeyId should be the first group in your received message.
 type Message struct {
+	Recipients [][]rune
+	From       []rune
 	DTG        dtg.DTG
 	GroupCount int
 	KeyId      []rune
 	PlainText  []rune
 	Binary     []byte
 	CipherText []rune
-	Recipients [][]rune
+	Radiogram  []rune // Raw radiogram
 	instance   *Krypto431
 }
 

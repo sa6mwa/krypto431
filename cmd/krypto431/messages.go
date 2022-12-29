@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/sa6mwa/krypto431"
 	"github.com/urfave/cli/v2"
 )
@@ -28,24 +29,24 @@ func receiveMessage(c *cli.Context) error {
 }
 
 func dev(c *cli.Context) error {
-	persistence := c.String("file")
-	k := krypto431.New(krypto431.WithPersistence(persistence))
+	o := getOptions(c)
+	k := krypto431.New(krypto431.WithPersistence(o.persistence), krypto431.WithInteractive(true))
 	err := k.Load()
 	if err != nil {
 		return err
 	}
+	defer k.Wipe()
 
-	/* 	for i := range k.Keys {
-	   		groups, err := k.Keys[i].Groups()
-	   		if err != nil {
-	   			return err
-	   		}
-	   		fmt.Printf("%d (id: %s, used: %t, keepers: %s):\n'%s'\n\n", len(k.Keys[i].Runes), string(k.Keys[i].Id), k.Keys[i].Used, strings.Join(krypto431.RunesToStrings(&k.Keys[i].Keepers), ", "), string(*groups))
-	   		krypto431.Wipe(groups)
-	   	}
-	*/
-	//k.NewTextMessage("Hello world", "VQ, KA", "HELLO")
-	err = k.NewTextMessage("Hej, how is it? Hello world")
+	var radiogram string
+	prompt := &survey.Multiline{
+		Message: "Enter radiogram",
+	}
+	err = survey.AskOne(prompt, &radiogram)
+	if err != nil {
+		return err
+	}
+
+	err = k.NewTextMessage(radiogram)
 	if err != nil {
 		return err
 	}

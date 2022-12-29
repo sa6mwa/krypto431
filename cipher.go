@@ -482,46 +482,54 @@ func (r *Krypto431) MarkKeyUsed(keyId []rune, used bool) error {
 // an error. If there is no CipherText or KeyId, the function will try to find
 // one where all recipients are keepers of this key. The message KeyId will be
 // used by diana.Trigraph during encryption/decryption.
-func (t *Message) EnrichWithKey() error {
-	if len(t.PlainText) == 0 {
+func (m *Message) EnrichWithKey() error {
+	if len(m.PlainText) == 0 {
 		return errors.New("message plain text is empty")
 	}
-	if len(t.KeyId) > 0 {
+	if len(m.KeyId) > 0 {
 		// already enriched with a KeyId, check if it's of correct length or used, if so, return error otherwise OK
-		if len(t.KeyId) != t.instance.GroupSize {
-			return fmt.Errorf("message key id is not %d letters long (configured group size)", t.instance.GroupSize)
+		if len(m.KeyId) != m.instance.GroupSize {
+			return fmt.Errorf("message key id is not %d letters long (configured group size)", m.instance.GroupSize)
 		}
-		for i := range t.instance.Keys {
-			if string(t.instance.Keys[i].Id) == string(t.KeyId) && t.instance.Keys[i].Used {
-				return fmt.Errorf("message already enriched with used KeyId %s", string(t.KeyId))
-			} else if string(t.instance.Keys[i].Id) == string(t.KeyId) && !t.instance.Keys[i].Used {
-				return nil
+		for i := range m.instance.Keys {
+			if EqualRunes(&m.instance.Keys[i].Id, &m.KeyId) {
+				if m.instance.Keys[i].Used {
+					return fmt.Errorf("message already enriched with used KeyId %s", string(m.KeyId))
+				} else if m.instance.Keys[i].Compromised {
+					return fmt.Errorf("message already enriched with compromised KeyId %s", string(m.KeyId))
+				} else {
+					return nil
+				}
 			}
 		}
 		return errors.New("message enriched with non-existing key, unable to encipher plain text")
 	}
-	if len(t.CipherText) > 0 {
+	if len(m.CipherText) > 0 {
 		// message appear to have cipher text already, do not enrich with key and do
 		// not validate if the key exists (decipher will fail if it doesn't exist
 		// anyway).
-		if len(t.KeyId) != t.instance.GroupSize {
-			return errors.New("message already contain cipher text, but key id is empty or not correct length")
+		if len(m.KeyId) != m.instance.GroupSize {
+			return errors.New("message already contain cipher text, but key ID is empty or not of correct length")
 		}
 		return nil
 	}
 
-	designatedKey := t.instance.FindKey(t.Recipients...)
+	designatedKey := m.instance.FindKey(m.Recipients...)
 	if designatedKey == nil {
-		if len(t.Recipients) == 0 {
+		if len(m.Recipients) == 0 {
 			return errors.New("did not find an anonymous key (a key without keepers)")
 		} else {
-			return errors.New("did not find a key where all recipients are keepers of the same key")
+			plural := "is keeper of the"
+			if len(m.Recipients) > 1 {
+				plural = "are keepers of the same"
+			}
+			return fmt.Errorf("did not find a valid key where %s %s key", JoinRunesToString(&m.Recipients, ", "), plural)
 		}
 	}
 	// Mark key as used.
 	designatedKey.Used = true
 	// Enrich message instance with key id.
-	t.KeyId = designatedKey.Id
+	m.KeyId = designatedKey.Id
 	return nil
 }
 
