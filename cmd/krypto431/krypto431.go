@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/sa6mwa/krypto431"
 	"github.com/urfave/cli/v2"
 )
@@ -13,6 +14,21 @@ var (
 	version      string
 	ErrAssertion error = errors.New("assertion error")
 )
+
+var (
+	customMultilineQuestionTemplate string = `
+{{- if not .ShowAnswer}}
+{{- if .ShowHelp }}{{- color .Config.Icons.Help.Format }}{{ .Config.Icons.Help.Text }} {{ .Help }}{{color "reset"}}{{"\n"}}{{end}}
+{{- color .Config.Icons.Question.Format }}{{ .Config.Icons.Question.Text }} {{color "reset"}}
+{{- color "default+hb"}}{{ .Message }} {{color "reset"}}
+{{- if .Default}}{{color "white"}}({{.Default}}) {{color "reset"}}{{end}}
+{{- color "cyan"}}[Enter 2 empty lines to finish]{{color "reset"}}
+{{ end}}`
+)
+
+func init() {
+	survey.MultilineQuestionTemplate = customMultilineQuestionTemplate
+}
 
 func fatalf(format string, a ...any) {
 	format += LineBreak

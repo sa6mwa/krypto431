@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/sa6mwa/krypto431"
 	"github.com/urfave/cli/v2"
@@ -37,9 +39,10 @@ func dev(c *cli.Context) error {
 	}
 	defer k.Wipe()
 
+	fmt.Print(krypto431.HelpTextRadiogram)
 	var radiogram string
 	prompt := &survey.Multiline{
-		Message: "Enter radiogram",
+		Message: "Enter new message as radiogram",
 	}
 	err = survey.AskOne(prompt, &radiogram)
 	if err != nil {

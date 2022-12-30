@@ -13,6 +13,20 @@ import (
 )
 
 var (
+	HelpTextRadiogram string = `RADIOGRAM
+Message header as well as text body is entered as a radiogram in the old Swedish
+Armed Forces radiotelegraph message format (simplified ACP 124). Examples:
+TO1 TO2 TO3 DE FROM 012345 = Hello, this is the body of the message = K
+DE FROM This is the shortest form.
+TO DE FROM 012345ZDEC22 COL 3 = ABCDE FGHIJ KLMNO = K
+TO DE FROM 012345 == TO2 TO3 == COL 2 = Hello world K
+TO DE FROM 012345 C = This is a broadcast message. +
+DE FROM 012345 4 = ABCDE FGHIJ KLMNO QRSTU = K
+*) TO is the call-sign(s) of the recipient(s).
+   FROM is your call-sign.
+   012345 is a Date-Time Group (day hour minute, full format DDHHMMZmmmYY).
+`
+
 	// Full message format (012345 = Date-Time Group, abbreviated or full e.g
 	// 012345AJAN23). Action addressees (adressmening), precedence or message
 	// instructions (tjänsteanmärkning) are all non-capturing groups.
@@ -72,7 +86,7 @@ var (
 	// up the message text).
 	//
 	// MessageTrailRegexp.ReplaceAllString(messageText, "")
-	MessageTrailRegexp *regexp.Regexp = regexp.MustCompile(`(\s*=\s*[K+]|\s[K+]|\s*\[AR\]|\s*=\s*AR)\s*$`)
+	MessageTrailRegexp *regexp.Regexp = regexp.MustCompile(`(?i)(\s*=\s*[K+]|\s[K+]|\s*\[AR\]|\s*=\s*AR)\s*$`)
 )
 
 // Creates a new message from a radiogram (Swedish Armed Forces telegraphy
