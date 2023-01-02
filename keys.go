@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/sa6mwa/krypto431/crand"
@@ -16,7 +17,7 @@ func (k *Krypto431) ContainsKeyId(keyId *[]rune) bool {
 		return false
 	}
 	for i := range k.Keys {
-		if string(k.Keys[i].Id) == string(*keyId) {
+		if EqualRunesFold(&k.Keys[i].Id, keyId) {
 			return true
 		}
 	}
@@ -34,9 +35,7 @@ func (k *Krypto431) NewKey(keepers ...string) *[]rune {
 		Compromised: false,
 		instance:    k,
 	}
-
 	key.Keepers = VettedKeepers(keepers...)
-
 	for { // if we already have 26*26*26*26*26 keys, this is an infinite loop :)
 		for i := range key.Id {
 			key.Id[i] = rune(crand.Intn(26)) + rune('A')
@@ -58,8 +57,55 @@ func (k *Krypto431) NewKey(keepers ...string) *[]rune {
 	return &key.Id
 }
 
+func (k *Krypto431) DeleteKey(keyIds ...string) error {
+	k.mx.Lock()
+	defer k.mx.Unlock()
+	if len(keyIds) == 0 {
+		return nil
+	}
+	var vettedKeyIds [][]rune
+	defer func() {
+		for i := range vettedKeyIds {
+			fmt.Println("Deleting " + string(vettedKeyIds[i]))
+			Wipe(&vettedKeyIds[i])
+		}
+		vettedKeyIds = nil
+	}()
+	for i := range keyIds {
+		keyId := []rune(strings.TrimSpace(strings.ToUpper(keyIds[i])))
+		if len(keyId) != k.GroupSize {
+			return fmt.Errorf("\"%s\" is not the length of the configured group size (%d)", string(keyId), k.GroupSize)
+		}
+		vettedKeyIds = append(vettedKeyIds, keyId)
+	}
+	for x := range vettedKeyIds {
+		for i := range k.Keys {
+			if EqualRunes(&k.Keys[i].Id, &vettedKeyIds[x]) {
+				k.Keys[i].Wipe()
+				k.Keys[i] = k.Keys[len(k.Keys)-1]
+				k.Keys = k.Keys[:len(k.Keys)-1]
+				break
+			}
+		}
+	}
+	return nil
+}
+
+func (k *Krypto431) DeleteKeysFromSummaryString(summaryStrings ...string) error {
+	for i := range summaryStrings {
+		key, _, _ := strings.Cut(summaryStrings[i], " ")
+		err := k.DeleteKey(key)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // GenerateKeys creates n amount of keys.
 func (k *Krypto431) GenerateKeys(n int, keepers ...string) error {
+	k.mx.Lock()
+	defer k.mx.Unlock()
 	for i := 0; i < n; i++ {
 		_ = k.NewKey(keepers...)
 	}
@@ -124,6 +170,13 @@ func (k *Key) CompromisedString() string {
 	return "No"
 }
 
+// continue here TODO
+// add sort function to list (for list, delete, etc).
+// idea: let digest be pointer slice with keys, sort pointers based on date, etc...
+//
+//	sort.Slice(dateSlice, func(i, j int) bool {
+//			return dateSlice[i].sortByThis.Before(dateSlice[j].sortByThis)
+//		})
 func (k *Krypto431) SummaryOfKeys(filterFunction func(key *Key) bool) (header []rune, lines [][]rune) {
 	var digests [][][]rune
 	defer func() {

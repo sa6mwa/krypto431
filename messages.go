@@ -90,8 +90,8 @@ DE FROM 012345 4 = ABCDE FGHIJ KLMNO QRSTU = K
 )
 
 // Creates a new message from a radiogram (Swedish Armed Forces telegraphy
-// radiogram which can be thought of as a simplified ACP 124). First argument is
-// a radiogram, optional second argument is a key ID which - if specified - will
+// radiogram which can be thought of as simplified ACP 124). First argument is a
+// radiogram, optional second argument is a key ID which - if specified - will
 // override the key finder function (a used or compromised key will not be
 // allowed).
 func (k *Krypto431) NewTextMessage(msg ...string) error {

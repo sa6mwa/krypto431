@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/sa6mwa/krypto431"
 	"github.com/urfave/cli/v2"
 )
@@ -25,6 +26,48 @@ func keys(c *cli.Context) error {
 
 	vettedKeepers := krypto431.VettedKeepers(o.keepers...)
 
+	filterFunction := func(key *krypto431.Key) bool {
+		// Next is almost redundant as function selects all keys if no filters av been applied.
+		if o.all {
+			return true
+		}
+		if len(vettedKeepers) > 0 {
+			// List keys with keepers AND anonymous if --anonymous is given...
+			if o.or {
+				if !krypto431.AnyNeedleInHaystack(&vettedKeepers, &key.Keepers) {
+					return false
+				}
+			} else {
+				if !krypto431.AllNeedlesInHaystack(&vettedKeepers, &key.Keepers) {
+					return false
+				}
+			}
+		}
+		if o.invalid {
+			if key.Compromised || key.IsExpired() {
+				return false
+			}
+		}
+		if o.compromised && !key.Compromised {
+			return false
+		}
+		if o.used && !key.Used {
+			return false
+		}
+		if o.unused && key.Used {
+			return false
+		}
+		if c.IsSet(oValid) {
+			if key.Compromised {
+				return false
+			}
+			if !key.IsValid(time.Duration(o.valid) * 24 * time.Hour) {
+				return false
+			}
+		}
+		return true
+	}
+
 	// list keys is a singleton, exit after listing
 	if c.IsSet(oList) && o.listItems {
 		// First, ensure there are keys in this instance.
@@ -33,49 +76,7 @@ func keys(c *cli.Context) error {
 			fmt.Fprintf(os.Stderr, "There are no keys in %s."+LineBreak, k.GetPersistence())
 			return nil
 		}
-
-		header, lines := k.SummaryOfKeys(func(key *krypto431.Key) bool {
-			// Next is almost redundant as function selects all keys if no filters av been applied.
-			if o.all {
-				return true
-			}
-			if len(vettedKeepers) > 0 {
-				// List keys with keepers AND anonymous if --anonymous is given...
-				if o.or {
-					if !krypto431.AnyNeedleInHaystack(&vettedKeepers, &key.Keepers) {
-						return false
-					}
-				} else {
-					if !krypto431.AllNeedlesInHaystack(&vettedKeepers, &key.Keepers) {
-						return false
-					}
-				}
-			}
-			if o.invalid {
-				if key.Compromised || key.IsExpired() {
-					return false
-				}
-			}
-			if o.compromised && !key.Compromised {
-				return false
-			}
-			if o.used && !key.Used {
-				return false
-			}
-			if o.unused && key.Used {
-				return false
-			}
-			if c.IsSet(oValid) {
-				if key.Compromised {
-					return false
-				}
-				if !key.IsValid(time.Duration(o.valid) * 24 * time.Hour) {
-					return false
-				}
-			}
-			return true
-		})
-
+		header, lines := k.SummaryOfKeys(filterFunction)
 		if len(lines) == 0 {
 			plural := ""
 			if keys > 1 {
@@ -84,22 +85,75 @@ func keys(c *cli.Context) error {
 			fmt.Fprintf(os.Stderr, "No key out of %d key"+plural+" in %s matched select criteria."+LineBreak, keys, k.GetPersistence())
 			return nil
 		}
-
 		// Print lines of keys...
 		fmt.Println(strings.TrimRight(string(header), " "))
 		for i := range lines {
 			fmt.Println(strings.TrimRight(string(lines[i]), " "))
 		}
-
 		return nil
 	}
 
 	// generate new keys function is also a singleton
 	if c.IsSet(oNumberOfKeys) && o.numberOfKeys > 0 {
+		err = k.GenerateKeys(o.numberOfKeys, o.keepers...)
+		if err != nil {
+			return err
+		}
+		err = k.Save()
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "Generated %d keys"+LineBreak, o.numberOfKeys)
 		return nil
 	}
 
 	// delete keys
+	if c.IsSet(oDelete) && o.deleteItems {
+		keys := len(k.Keys)
+		if keys == 0 {
+			fmt.Fprintf(os.Stderr, "There are no keys in %s."+LineBreak, k.GetPersistence())
+			return nil
+		}
+		_, lines := k.SummaryOfKeys(filterFunction)
+		if len(lines) == 0 {
+			plural := ""
+			if keys > 1 {
+				plural = "s"
+			}
+			fmt.Fprintf(os.Stderr, "No key out of %d key"+plural+" in %s matched select criteria."+LineBreak, keys, k.GetPersistence())
+			return nil
+		}
+		var keyStrings []string
+		for i := range lines {
+			keyStrings = append(keyStrings, string(lines[i]))
+		}
+		var response []string
+		prompt := &survey.MultiSelect{
+			Message:  "Select key(s) to delete",
+			Help:     "Columns are ID, KEEPERS, CREATED, EXPIRES, USED, COMPROMISED and COMMENT",
+			Options:  keyStrings,
+			PageSize: 20,
+		}
+		err := survey.AskOne(prompt, &response, survey.WithKeepFilter(true))
+		if err != nil {
+			return err
+		}
+		if len(response) == 0 {
+			fmt.Fprintln(os.Stderr, "No key(s) selected.")
+			return nil
+		}
+
+		err = k.DeleteKeysFromSummaryString(response...)
+		if err != nil {
+			return err
+		}
+		err = k.Save()
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "Deleted %d keys."+LineBreak, len(response))
+		return nil
+	}
 
 	// import keys
 

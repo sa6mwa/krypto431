@@ -258,6 +258,8 @@ func GeneratePFK() string {
 // gzipped GOB (Go Binary) which is XSalsa20Poly1305 encrypted using a 32 byte
 // key set via DeriveKeyFromPassword(), SetKeyFromString() or WithKey().
 func (k *Krypto431) Save() error {
+	k.mx.Lock()
+	defer k.mx.Unlock()
 	if len(k.persistence) == 0 {
 		return ErrNoPersistence
 	}
@@ -340,6 +342,8 @@ func (k *Krypto431) Save() error {
 // Krypto431_Load() loads a Krypto431 instance from the configured persistence
 // file (k.persistence). Only exported fields will be populated.
 func (k *Krypto431) Load() error {
+	k.mx.Lock()
+	defer k.mx.Unlock()
 	if len(k.persistence) == 0 {
 		return ErrNoPersistence
 	}
