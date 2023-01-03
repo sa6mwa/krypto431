@@ -1,10 +1,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/sa6mwa/krypto431"
@@ -93,7 +94,7 @@ func keys(c *cli.Context) error {
 	if c.IsSet(oDelete) && o.deleteItems {
 		keys := len(k.Keys)
 		if keys == 0 {
-			fmt.Fprintf(os.Stderr, "There are no keys in %s."+LineBreak, k.GetPersistence())
+			eprintf("There are no keys in %s."+LineBreak, k.GetPersistence())
 			return nil
 		}
 		deleted := 0
@@ -104,7 +105,7 @@ func keys(c *cli.Context) error {
 				if keys > 1 {
 					plural = "s"
 				}
-				fmt.Fprintf(os.Stderr, "No key out of %d key"+plural+" in %s matched criteria."+LineBreak, keys, k.GetPersistence())
+				eprintf("No key out of %d key"+plural+" in %s matched criteria."+LineBreak, keys, k.GetPersistence())
 				return nil
 			}
 			var keyStrings []string
@@ -123,7 +124,7 @@ func keys(c *cli.Context) error {
 				return err
 			}
 			if len(response) == 0 {
-				fmt.Fprintln(os.Stderr, "No key(s) selected.")
+				eprintln("No key(s) selected.")
 				return nil
 			}
 			err = k.DeleteKeysFromSummaryString(response...)
@@ -143,7 +144,7 @@ func keys(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(os.Stderr, "Deleted %d keys."+LineBreak, deleted)
+		eprintf("Deleted %d keys."+LineBreak, deleted)
 	}
 
 	// generate new keys
@@ -160,19 +161,35 @@ func keys(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(os.Stderr, "Generated %d keys"+LineBreak, o.newInt)
+		eprintf("Generated %d keys"+LineBreak, o.newInt)
 	}
 
 	// import keys
 	if c.IsSet(oImport) {
-		fmt.Println("import goes here")
+		if utf8.RuneCountInString(o.importItems) == 0 {
+			return errors.New("filename to import keys from is missing")
+		}
+		err := k.ImportKeys() //continue here
+
 	}
 
 	// export keys
 	if c.IsSet(oExport) {
-		k2 := k.ExportKeys(filterFunction)
+		if utf8.RuneCountInString(o.exportItems) == 0 {
+			return errors.New("filename to export keys to is missing")
+		}
+		k2 := k.ExportKeys(filterFunction, krypto431.WithPersistence(o.exportItems), krypto431.WithOverwritePersistenceIfExists(o.yes))
 		defer k2.Wipe()
-
+		err := k2.Save()
+		if err != nil {
+			return err
+		}
+		keysExported := len(k2.Keys)
+		plural := ""
+		if keysExported == 0 || keysExported > 1 {
+			plural = "s"
+		}
+		eprintf("Exported %d key%s from %s to %s (change PFK/salt with the pfk command)."+LineBreak, keysExported, plural, keysExportedSentence, k.GetPersistence(), k2.GetPersistence())
 	}
 
 	// list keys
@@ -180,7 +197,7 @@ func keys(c *cli.Context) error {
 		// First, ensure there are keys in this instance.
 		keys := len(k.Keys)
 		if keys == 0 {
-			fmt.Fprintf(os.Stderr, "There are no keys in %s."+LineBreak, k.GetPersistence())
+			eprintf("There are no keys in %s."+LineBreak, k.GetPersistence())
 			return nil
 		}
 		header, lines := k.SummaryOfKeys(filterFunction)
@@ -189,7 +206,7 @@ func keys(c *cli.Context) error {
 			if keys > 1 {
 				plural = "s"
 			}
-			fmt.Fprintf(os.Stderr, "No key out of %d key"+plural+" in %s matched criteria."+LineBreak, keys, k.GetPersistence())
+			eprintf("No key out of %d key"+plural+" in %s matched criteria."+LineBreak, keys, k.GetPersistence())
 			return nil
 		}
 		// Print lines of keys...

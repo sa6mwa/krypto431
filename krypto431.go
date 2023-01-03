@@ -438,6 +438,7 @@ func New(opts ...Option) Krypto431 {
 	instance := Krypto431{
 		persistence:                  DefaultPersistence,
 		persistenceKey:               nil,
+		salt:                         nil,
 		overwritePersistenceIfExists: false,
 		interactive:                  false,
 		GroupSize:                    DefaultGroupSize,

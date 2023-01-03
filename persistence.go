@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/AlecAivazis/survey/v2"
@@ -99,6 +100,12 @@ func (k *Krypto431) GetSaltString() string {
 // an instance.
 func (k *Krypto431) GetPersistence() string {
 	return k.persistence
+}
+
+// SetPersistence sets the non-exported persistence property in the instance to
+// filename.
+func (k *Krypto431) SetPersistence(filename string) {
+	k.persistence = filename
 }
 
 // Takes salt from a hex encoded string, converts it into a byte slice and sets
@@ -422,9 +429,11 @@ func (k *Krypto431) Load() error {
 // where only the keys that pass the filterFunction are copied over (entirely
 // w/o messages). The filterFunction must return true for each key to to export
 // (copy to the new instance) and false to not copy the key. The new instance's
-// persistence field (filename of the save-file) will be empty, update it
-// afterwards with n.SetPersistence().
-func (k *Krypto431) ExportKeys(filterFunction func(key *Key) bool) Krypto431 {
+// persistence field (filename of the save-file) will be empty unless option
+// function WithPersistence(filename) is specified (can also be configured
+// afterwards with SetPersistence()). Any Option function (With*) can be used to
+// override any copied field.
+func (k *Krypto431) ExportKeys(filterFunction func(key *Key) bool, opts ...Option) Krypto431 {
 	n := Krypto431{
 		persistenceKey:               BytePtr(ByteCopy(k.persistenceKey)),
 		salt:                         BytePtr(ByteCopy(k.salt)),
@@ -438,6 +447,12 @@ func (k *Krypto431) ExportKeys(filterFunction func(key *Key) bool) Krypto431 {
 		Messages:                     make([]Message, 0, 0),
 		CallSign:                     RuneCopy(&k.CallSign),
 	}
+	for _, opt := range opts {
+		opt(&n)
+	}
+	if n.mx == nil {
+		n.mx = &sync.Mutex{}
+	}
 	for i := range k.Keys {
 		if filterFunction(&k.Keys[i]) {
 			newKey := k.Keys[i]
@@ -447,3 +462,5 @@ func (k *Krypto431) ExportKeys(filterFunction func(key *Key) bool) Krypto431 {
 	}
 	return n
 }
+
+func (k *Krypto431) ImportKeys(filterFunction func(key *Key) bool, persistence)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/sa6mwa/krypto431"
@@ -164,4 +165,12 @@ func askYesNo(msg string) (doit bool, err error) {
 	}
 	err = survey.AskOne(prompt, &doit)
 	return
+}
+
+func eprintf(format string, a ...any) (int, error) {
+	return fmt.Fprintf(os.Stderr, format, a...)
+}
+
+func eprintln(a ...any) (int, error) {
+	return fmt.Fprintln(os.Stderr, a...)
 }

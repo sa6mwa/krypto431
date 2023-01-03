@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -178,7 +179,7 @@ func initialize(c *cli.Context) error {
 			expiryDTG = &o.expire
 		}
 		if o.keys > 5000 {
-			fmt.Printf("Generating %d keys"+LineBreak, o.keys)
+			fmt.Fprintf(os.Stderr, "Generating %d keys"+LineBreak, o.keys)
 		}
 		err := k.GenerateKeys(o.keys, expiryDTG, o.keepers...)
 		if err != nil {
