@@ -169,8 +169,19 @@ func keys(c *cli.Context) error {
 		if utf8.RuneCountInString(o.importItems) == 0 {
 			return errors.New("filename to import keys from is missing")
 		}
-		err := k.ImportKeys() //continue here
-
+		err, numberOfKeysImported := k.ImportKeys(filterFunction, krypto431.WithPersistence(o.importItems))
+		if err != nil {
+			return err
+		}
+		err = k.Save()
+		if err != nil {
+			return err
+		}
+		plural := ""
+		if numberOfKeysImported == 0 || numberOfKeysImported > 1 {
+			plural = "s"
+		}
+		eprintf("Imported %d key%s from %s to %s."+LineBreak, numberOfKeysImported, plural, o.importItems, k.GetPersistence())
 	}
 
 	// export keys

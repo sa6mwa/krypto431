@@ -463,4 +463,16 @@ func (k *Krypto431) ExportKeys(filterFunction func(key *Key) bool, opts ...Optio
 	return n
 }
 
-func (k *Krypto431) ImportKeys(filterFunction func(key *Key) bool, persistence)
+// Krypto431_ImportKeys() does the opposite of ExportKeys(). The filterFunction
+// is run on the keys inside the persistence file specified in the opts variadic
+// using WithPersistence(filename), for example:
+//
+
+func (k *Krypto431) ImportKeys(filterFunction func(key *Key) bool, opts ...Option) (error, int) {
+	keyCount := 0
+	importedInstance := New(opts...)
+
+	// continue here
+
+	return nil, keyCount
+}

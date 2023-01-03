@@ -116,7 +116,7 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 					&cli.StringFlag{
 						Name:    oCall,
 						Aliases: []string{"c"},
-						Usage:   "My call-sign",
+						Usage:   "Your call-sign `QRZ`",
 					},
 					&cli.IntFlag{
 						Name:    oKeys,
@@ -132,7 +132,7 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 					&cli.StringSliceFlag{
 						Name:    oKeepers,
 						Aliases: []string{"k"},
-						Usage:   "Call-sign(s) that keep these keys (omit for anonymous keys)",
+						Usage:   "`QRZ` of remote station(s) that keep these keys (omit for anonymous keys)",
 					},
 					&cli.IntFlag{
 						Name:    oKeyLength,
