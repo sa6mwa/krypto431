@@ -17,7 +17,7 @@ func TestGenerateKeys(t *testing.T) {
 	keySize := 1000
 	k := New(WithKeyLength(keySize))
 	t.Log("Generating...")
-	err := k.GenerateKeys(100)
+	err := k.GenerateKeys(100, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

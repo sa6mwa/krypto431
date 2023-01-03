@@ -15,7 +15,9 @@ type options struct {
 	password     string
 	random       bool
 	call         string
-	numberOfKeys int
+	keys         int
+	keySlice     []string
+	newInt       int
 	keepers      []string
 	keyLength    int
 	groupSize    int
@@ -53,7 +55,7 @@ const (
 	oRandom       string = "random"
 	oSave         string = "save"
 	oCall         string = "call"
-	oNumberOfKeys string = "keys"
+	oKeys         string = "keys"
 	oKeepers      string = "keepers"
 	oKeyLength    string = "key-length"
 	oGroupSize    string = "groupsize"
@@ -92,7 +94,9 @@ func getOptions(c *cli.Context) options {
 		password:     c.String(oPassword),
 		random:       c.Bool(oRandom),
 		call:         c.String(oCall),
-		numberOfKeys: c.Int(oNumberOfKeys),
+		keys:         c.Int(oKeys),
+		keySlice:     c.StringSlice(oKeys),
+		newInt:       c.Int(oNew),
 		keepers:      c.StringSlice(oKeepers),
 		keyLength:    c.Int(oKeyLength),
 		groupSize:    c.Int(oGroupSize),

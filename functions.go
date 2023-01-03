@@ -121,6 +121,11 @@ func VettedRecipients(recipients ...string) [][]rune {
 	return VettedKeepers(recipients...)
 }
 
+// VettedKeys is an alias for VettedKeepers.
+func VettedKeys(keys ...string) [][]rune {
+	return VettedKeepers(keys...)
+}
+
 // Function to compare two rune slices. Returns true if they are equal, false if
 // not.
 func EqualRunes(a *[]rune, b *[]rune) bool {
@@ -162,9 +167,10 @@ func EqualRunesFold(a *[]rune, b *[]rune) bool {
 }
 
 // ColumnSizes calculates max length of each []rune in a slice of []rune slices.
-// Intended to be used to format multiple responses from Key.Digest() and
-// Message.Digest() for printing.
-func ColumnSizes(headerFields []string, rs [][][]rune) (columnSizes []int) {
+// If optional column headers are provided (as a string slice), their length
+// will be taken into account as well. Left for legacy, replaced by
+// predictColumnSizes().
+func ColumnSizes(rs [][][]rune, headerFields ...string) (columnSizes []int) {
 	for item := range rs {
 		for col := range rs[item] {
 			ilen := len(rs[item][col])
@@ -186,6 +192,65 @@ func ColumnSizes(headerFields []string, rs [][][]rune) (columnSizes []int) {
 	return
 }
 
+// Function internal to SummaryOfKeys(), faster than previous method (digest and
+// ColumnSizes). Assumes the following header:
+//
+// []string{"ID", "KEEPERS", "CREATED", "EXPIRES", "USED", "COMPROMISED", "COMMENT"}
+func predictColumnSizesOfKeys(keys []*Key) (columnSizes [7]int) {
+	if len(keys) > 0 {
+		if keys[0] == nil {
+			return
+		}
+		// Just assume key length is the instance's group size of the first key in
+		// the slice.
+		columnSizes[0] = keys[0].instance.GroupSize
+		// Keepers header is the initial length of the keepers column
+		columnSizes[1] = len("KEEPERS")
+		// Created and Expires are fixed length
+		columnSizes[2] = len("012345ZJAN23")
+		columnSizes[3] = len("012345ZJAN23")
+		// Used and Compromised are always the length of their headers
+		columnSizes[4] = len("USED")
+		columnSizes[5] = len("COMPROMISED")
+		for i := range keys {
+			if keys[i] == nil {
+				continue
+			}
+			var keepersLength int
+			if len(keys[i].Keepers) == 0 {
+				keepersLength = len("Anonymous")
+				if columnSizes[1] < keepersLength {
+					columnSizes[1] = keepersLength
+				}
+			} else {
+				for x := range keys[i].Keepers {
+					keepersLength += len(keys[i].Keepers[x]) + 1
+				}
+				if keepersLength > 0 && columnSizes[1] < keepersLength {
+					columnSizes[1] = keepersLength - 1
+				}
+			}
+			clen := len(keys[i].Comment)
+			if columnSizes[6] < clen {
+				columnSizes[6] = clen
+			}
+		}
+	}
+	return
+}
+
+func padding(s []rune, fieldLength int) (spaces []rune) {
+	padCount := fieldLength - len(s)
+	for x := 0; x < padCount; x++ {
+		spaces = append(spaces, rune(' '))
+	}
+	return
+}
+
+func withPadding(s []rune, fieldLength int) []rune {
+	return append(s, padding(s, fieldLength)...)
+}
+
 // Returns a copy of a rune slice.
 func RuneCopy(src *[]rune) []rune {
 	if src == nil {
@@ -194,4 +259,22 @@ func RuneCopy(src *[]rune) []rune {
 	runeCopy := make([]rune, len(*src))
 	copy(runeCopy, *src)
 	return runeCopy
+}
+
+func RunePtr(s []rune) *[]rune {
+	return &s
+}
+
+// Returns a copy of a byte slice.
+func ByteCopy(src *[]byte) []byte {
+	if src == nil {
+		return []byte{}
+	}
+	byteCopy := make([]byte, len(*src))
+	copy(byteCopy, *src)
+	return byteCopy
+}
+
+func BytePtr(s []byte) *[]byte {
+	return &s
 }

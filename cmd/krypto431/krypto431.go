@@ -102,9 +102,10 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 		},
 		Commands: []*cli.Command{
 			{
-				Name:   "initialize",
-				Usage:  "Initialize or reset storage file (keys, messages and settings)",
-				Action: initialize,
+				Name:    "initialize",
+				Aliases: []string{"init"},
+				Usage:   "Initialize or reset storage file (keys, messages and settings)",
+				Action:  initialize,
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
 						Name:    oYes,
@@ -118,10 +119,15 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 						Usage:   "My call-sign",
 					},
 					&cli.IntFlag{
-						Name:    oNumberOfKeys,
+						Name:    oKeys,
 						Aliases: []string{"n"},
 						Value:   0,
 						Usage:   "Initial keys to generate",
+					},
+					&cli.StringFlag{
+						Name:    oExpire,
+						Aliases: []string{"x"},
+						Usage:   "Set expiry date as `DTG` (Date-Time Group) on new keys",
 					},
 					&cli.StringSliceFlag{
 						Name:    oKeepers,
@@ -234,16 +240,21 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 						},
 					*/
 					&cli.IntFlag{
-						Name:    oNumberOfKeys,
+						Name:    oNew,
 						Aliases: []string{"n"},
 						Usage:   "Generate `n` number of new keys",
 						Value:   0,
+					},
+					&cli.StringFlag{
+						Name:    oExpire,
+						Aliases: []string{"x"},
+						Usage:   "Set expiry date as `DTG` (Date-Time Group) on new keys",
 					},
 					&cli.BoolFlag{
 						Name:    oDelete,
 						Aliases: []string{"d"},
 						Value:   false,
-						Usage:   "Delete keys (interactive)",
+						Usage:   "Delete keys",
 					},
 					&cli.StringFlag{
 						Name:    oImport,
@@ -258,21 +269,26 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 					&cli.StringSliceFlag{
 						Name:    oKeepers,
 						Aliases: []string{"k"},
-						Usage:   "Keepers of keys (new and as filter), omit on new will assign key(s) to you",
+						Usage:   "Keepers of keys (`QRZ`, new/filter), omit on new will assign key(s) to you",
 					},
 					&cli.BoolFlag{
 						Name:  oOr,
 						Usage: "Any of the keepers can keep the key(s)",
 						Value: false,
 					},
+					&cli.StringSliceFlag{
+						Name:    oKeys,
+						Aliases: []string{"i"},
+						Usage:   "Select specific key `ID`s (list/edit/import/export/delete)",
+					},
 					&cli.BoolFlag{
 						Name:  oAll,
-						Usage: "Select keys with and without keepers (list/edit/import/export/delete after confirmation)",
+						Usage: "Select all keys (list/edit/import/export/delete)",
 						Value: false,
 					},
 					&cli.IntFlag{
 						Name:  oValid,
-						Usage: "Select keys that do not expire within n `days` and are not compromised",
+						Usage: "Select or make keys that do not expire within n `days` and are not compromised",
 						Value: 0,
 					},
 					&cli.BoolFlag{
@@ -306,42 +322,7 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 					&cli.BoolFlag{
 						Name:    oYes,
 						Aliases: []string{"y"},
-						Usage:   "Force option, answer yes on questions",
-						Value:   false,
-					},
-				},
-			},
-			{
-				Name:   "listkeys",
-				Usage:  "List keys",
-				Action: listKeys,
-				Flags: []cli.Flag{
-					&cli.StringSliceFlag{
-						Name:    "keepers",
-						Aliases: []string{"k"},
-						Usage:   "Filter on keeper of keys (if empty, only anonymous keys are listed). OR is default logic for multiple keepers",
-					},
-					&cli.BoolFlag{
-						Name:    "and",
-						Aliases: []string{"a"},
-						Usage:   "Change keepers filter logic to AND, e.g keeper X and Y instead of X or Y",
-						Value:   false,
-					},
-					&cli.BoolFlag{
-						Name:  "all",
-						Usage: "List all keys",
-						Value: false,
-					},
-					&cli.BoolFlag{
-						Name:    "unused",
-						Aliases: []string{"U"},
-						Usage:   "List un-used keys only",
-						Value:   false,
-					},
-					&cli.BoolFlag{
-						Name:    "used",
-						Aliases: []string{"u"},
-						Usage:   "List used keys only",
+						Usage:   "Force option, answer yes and/or do not prompt except of PFK",
 						Value:   false,
 					},
 				},

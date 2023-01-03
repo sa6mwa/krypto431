@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sa6mwa/dtg"
 	"github.com/sa6mwa/krypto431/crand"
 )
 
@@ -27,7 +28,7 @@ func (k *Krypto431) ContainsKeyId(keyId *[]rune) bool {
 // NewKey generates a new key. The current implementation generates a random
 // group not yet in the Krypto431 construct. Keepers can be one call-sign per
 // variadic, comma-separated call-signs or a combination of both.
-func (k *Krypto431) NewKey(keepers ...string) *[]rune {
+func (k *Krypto431) NewKey(expire time.Time, keepers ...string) *[]rune {
 	key := Key{
 		Id:          make([]rune, k.GroupSize),
 		Runes:       make([]rune, int(int(math.Ceil(float64(k.KeyLength)/float64(k.GroupSize)))*k.GroupSize)),
@@ -35,6 +36,8 @@ func (k *Krypto431) NewKey(keepers ...string) *[]rune {
 		Compromised: false,
 		instance:    k,
 	}
+	key.Created.Time = time.Now()
+	key.Expires.Time = expire
 	key.Keepers = VettedKeepers(keepers...)
 	for { // if we already have 26*26*26*26*26 keys, this is an infinite loop :)
 		for i := range key.Id {
@@ -57,30 +60,16 @@ func (k *Krypto431) NewKey(keepers ...string) *[]rune {
 	return &key.Id
 }
 
-func (k *Krypto431) DeleteKey(keyIds ...string) error {
+// DeleteKey removes one or more keys from the instance's Key slice.
+func (k *Krypto431) DeleteKey(keyIds ...[]rune) error {
 	k.mx.Lock()
 	defer k.mx.Unlock()
 	if len(keyIds) == 0 {
 		return nil
 	}
-	var vettedKeyIds [][]rune
-	defer func() {
-		for i := range vettedKeyIds {
-			fmt.Println("Deleting " + string(vettedKeyIds[i]))
-			Wipe(&vettedKeyIds[i])
-		}
-		vettedKeyIds = nil
-	}()
-	for i := range keyIds {
-		keyId := []rune(strings.TrimSpace(strings.ToUpper(keyIds[i])))
-		if len(keyId) != k.GroupSize {
-			return fmt.Errorf("\"%s\" is not the length of the configured group size (%d)", string(keyId), k.GroupSize)
-		}
-		vettedKeyIds = append(vettedKeyIds, keyId)
-	}
-	for x := range vettedKeyIds {
+	for x := range keyIds {
 		for i := range k.Keys {
-			if EqualRunes(&k.Keys[i].Id, &vettedKeyIds[x]) {
+			if EqualRunesFold(&k.Keys[i].Id, &keyIds[x]) {
 				k.Keys[i].Wipe()
 				k.Keys[i] = k.Keys[len(k.Keys)-1]
 				k.Keys = k.Keys[:len(k.Keys)-1]
@@ -91,10 +80,16 @@ func (k *Krypto431) DeleteKey(keyIds ...string) error {
 	return nil
 }
 
+// DeleteKeyString is an alias for DeleteKey() where key IDs are issued as
+// strings instead of rune slices.
+func (k *Krypto431) DeleteKeyString(keyIds ...string) error {
+	return k.DeleteKey(VettedKeys(keyIds...)...)
+}
+
 func (k *Krypto431) DeleteKeysFromSummaryString(summaryStrings ...string) error {
 	for i := range summaryStrings {
 		key, _, _ := strings.Cut(summaryStrings[i], " ")
-		err := k.DeleteKey(key)
+		err := k.DeleteKeyString(key)
 		if err != nil {
 			return err
 		}
@@ -102,12 +97,25 @@ func (k *Krypto431) DeleteKeysFromSummaryString(summaryStrings ...string) error 
 	return nil
 }
 
-// GenerateKeys creates n amount of keys.
-func (k *Krypto431) GenerateKeys(n int, keepers ...string) error {
+// GenerateKeys creates n amount of keys. The expire argument is a Date-Time
+// Group when the key(s) is/are to expire (DDHHMMZmmmYY). If expire is nil, keys
+// will expire one year from current time. If no keepers are provided, keys will
+// be considered anonymous.
+func (k *Krypto431) GenerateKeys(n int, expire *string, keepers ...string) error {
 	k.mx.Lock()
 	defer k.mx.Unlock()
+	var expiryTime time.Time
+	if expire == nil {
+		expiryTime = time.Now().Add(365 * 24 * time.Hour)
+	} else {
+		d, err := dtg.Parse(*expire)
+		if err != nil {
+			return err
+		}
+		expiryTime = d.Time
+	}
 	for i := 0; i < n; i++ {
-		_ = k.NewKey(keepers...)
+		_ = k.NewKey(expiryTime, keepers...)
 	}
 	return nil
 }
@@ -142,20 +150,33 @@ func (k *Key) IsExpired() bool {
 }
 
 // Check if key is valid at least one day before expiring. Returns true if key
-// is OK, false if not.
+// does not expire within that time, false if not.
 func (k *Key) IsValidOneDay() bool {
-	return k.IsValid(-24 * time.Hour)
+	return k.IsValid(24 * time.Hour)
+}
+
+// Check if key is valid at least 30 days before expiring. Returns true if key
+// does not expire within that time, false if not.
+func (k *Key) IsValidOneMonth() bool {
+	return k.IsValid(30 * 24 * time.Hour)
+}
+
+// Check if key is valid at least one year (365 days) before expiring. Returns
+// true if key does not expire within that time, false if not.
+func (k *Key) IsValidOneYear() bool {
+	return k.IsValid(365 * 24 * time.Hour)
 }
 
 // Check if key is valid d amount of time before expiring (e.g 24*time.Hour for
 // one day). Returns true if key does not expire within d time or false if it
 // does.
 func (k *Key) IsValid(d time.Duration) bool {
-	return time.Now().Add(-d).After(k.Expires.Time)
+	return time.Now().Add(d).Before(k.Expires.Time)
 }
 
-// Returns Yes if key is marked used, No if not.
-func (k *Key) UsedString() string {
+// Returns Yes if key is marked used, No if not. Optional rightSpacing pads the
+// output string with trailing spaces.
+func (k *Key) UsedString(rightSpacing ...int) string {
 	if k.Used {
 		return "Yes"
 	}
@@ -178,79 +199,61 @@ func (k *Key) CompromisedString() string {
 //			return dateSlice[i].sortByThis.Before(dateSlice[j].sortByThis)
 //		})
 func (k *Krypto431) SummaryOfKeys(filterFunction func(key *Key) bool) (header []rune, lines [][]rune) {
-	var digests [][][]rune
-	defer func() {
-		for a := range digests {
-			for i := range digests[a] {
-				Wipe(&digests[a][i])
-			}
-			digests[a] = nil
-		}
-		digests = nil
-	}()
+	var kp []*Key
 	for i := range k.Keys {
 		if filterFunction(&k.Keys[i]) {
-			digests = append(digests, k.Keys[i].Digest())
+			kp = append(kp, &k.Keys[i])
 		}
 	}
-	if len(digests) > 0 {
-		columnHeader := []string{"ID", "KEEPERS", "CREATED", "EXPIRES", "USED", "COMPROMISED", "COMMENT"}
-		columnSizes := ColumnSizes(columnHeader, digests)
-		if len(columnSizes) != len(columnHeader) {
-			panic("wrong number of columns")
-		}
-		// Generate formatted header rune slice...
-		for i := range columnSizes {
-			if len(columnHeader) <= i {
-				continue
-			}
-			header = append(header, []rune(columnHeader[i])...)
-			if i < len(columnSizes)-1 {
-				padding := columnSizes[i] - len(columnHeader[i]) + 1
-				for x := 0; x < padding; x++ {
-					header = append(header, rune(' '))
-				}
-			}
-		}
-		// Populate lines with keys...
-		for row := range digests {
-			var line []rune
-			for col := range digests[row] {
-				if col >= len(columnSizes) {
-					continue
-				}
-				line = append(line, digests[row][col]...)
-				if col < len(digests[row])-1 {
-					padding := columnSizes[col] - len(digests[row][col]) + 1
-					for x := 0; x < padding; x++ {
-						line = append(line, rune(' '))
-					}
-				}
-			}
-			if len(line) > 0 {
-				lines = append(lines, line)
-			} else {
-				panic("empty line")
-			}
-		}
-	}
-	return
-}
 
-// Digest returns a slice of strings-as-rune-slices describing the key. Items in
-// the slice are ID, KEEPERS, CREATED, EXPIRES, USED (Y/N), COMPROMISED (Y/N),
-// COMMENT. The rune slices can be cleared with Wipe().
-func (k *Key) Digest() (digest [][]rune) {
-	digest = append(digest, RuneCopy(&k.Id))
-	if len(k.Keepers) > 0 {
-		digest = append(digest, []rune(k.JoinKeepers(",")))
-	} else {
-		digest = append(digest, []rune("Anonymous"))
+	// TODO: sort kptrs here
+
+	predictedColumnSizes := predictColumnSizesOfKeys(kp)
+
+	columnHeader := []string{"ID", "KEEPERS", "CREATED", "EXPIRES", "USED", "COMPROMISED", "COMMENT"}
+	// Guard rail...
+	if len(predictedColumnSizes) != len(columnHeader) {
+		panic("wrong number of columns")
 	}
-	digest = append(digest, []rune(k.Created.String()))
-	digest = append(digest, []rune(k.Expires.String()))
-	digest = append(digest, []rune(k.UsedString()))
-	digest = append(digest, []rune(k.CompromisedString()))
-	digest = append(digest, RuneCopy(&k.Comment))
+	addSpace := 1
+	// Generate formatted header rune slice...
+	for i := range predictedColumnSizes {
+		if len(columnHeader) <= i {
+			continue
+		}
+		// Add column header and padding.
+		header = append(header, []rune(columnHeader[i])...)
+		if i < len(predictedColumnSizes)-1 {
+			padding := predictedColumnSizes[i] - len(columnHeader[i]) + addSpace
+			for x := 0; x < padding; x++ {
+				header = append(header, rune(' '))
+			}
+		}
+	}
+	// Populate lines rune slice with keys
+	for i := range kp {
+		var columns [][]rune
+		columns = append(columns, withPadding(RuneCopy(&kp[i].Id), predictedColumnSizes[0]+addSpace))
+		if len(kp[i].Keepers) > 0 {
+			columns = append(columns, withPadding([]rune(kp[i].JoinKeepers(",")), predictedColumnSizes[1]+addSpace))
+		} else {
+			columns = append(columns, withPadding([]rune("Anonymous"), predictedColumnSizes[1]+addSpace))
+		}
+		columns = append(columns, withPadding([]rune(kp[i].Created.String()), predictedColumnSizes[2]+addSpace))
+		columns = append(columns, withPadding([]rune(kp[i].Expires.String()), predictedColumnSizes[3]+addSpace))
+		columns = append(columns, withPadding([]rune(kp[i].UsedString()), predictedColumnSizes[4]+addSpace))
+		columns = append(columns, withPadding([]rune(kp[i].CompromisedString()), predictedColumnSizes[5]+addSpace))
+		columns = append(columns, withPadding([]rune(kp[i].Comment), predictedColumnSizes[6]+addSpace))
+		var totalLineLength int
+		for x := range columns {
+			totalLineLength += len(columns[x])
+		}
+		line := make([]rune, totalLineLength)
+		var y int
+		for z := range columns {
+			y += copy(line[y:], columns[z])
+		}
+		lines = append(lines, line)
+	}
 	return
 }

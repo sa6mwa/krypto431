@@ -417,3 +417,33 @@ func (k *Krypto431) Load() error {
 	k.overwritePersistenceIfExists = true
 	return nil
 }
+
+// Krypto431.ExportKeys() returns a new instance based on the current instance
+// where only the keys that pass the filterFunction are copied over (entirely
+// w/o messages). The filterFunction must return true for each key to to export
+// (copy to the new instance) and false to not copy the key. The new instance's
+// persistence field (filename of the save-file) will be empty, update it
+// afterwards with n.SetPersistence().
+func (k *Krypto431) ExportKeys(filterFunction func(key *Key) bool) Krypto431 {
+	n := Krypto431{
+		persistenceKey:               BytePtr(ByteCopy(k.persistenceKey)),
+		salt:                         BytePtr(ByteCopy(k.salt)),
+		overwritePersistenceIfExists: false,
+		interactive:                  k.interactive,
+		GroupSize:                    k.GroupSize,
+		KeyLength:                    k.KeyLength,
+		Columns:                      k.Columns,
+		KeyColumns:                   k.KeyColumns,
+		Keys:                         make([]Key, 0, len(k.Keys)),
+		Messages:                     make([]Message, 0, 0),
+		CallSign:                     RuneCopy(&k.CallSign),
+	}
+	for i := range k.Keys {
+		if filterFunction(&k.Keys[i]) {
+			newKey := k.Keys[i]
+			newKey.instance = &n
+			n.Keys = append(n.Keys, newKey)
+		}
+	}
+	return n
+}

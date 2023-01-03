@@ -32,7 +32,7 @@ func initialize(c *cli.Context) error {
 		o.call = strings.ToUpper(strings.TrimSpace(o.call))
 	}
 
-	flags := []string{oYes, oCall, oNumberOfKeys, oKeepers, oKeyLength, oGroupSize}
+	flags := []string{oYes, oCall, oKeys, oKeepers, oKeyLength, oGroupSize}
 	goInteractive := true
 	for i := range flags {
 		if c.IsSet(flags[i]) {
@@ -45,6 +45,7 @@ func initialize(c *cli.Context) error {
 		answers := struct {
 			NumberOfKeys int    `survey:"keys"`
 			Keepers      string `survey:"keepers"`
+			Expire       string `survey:"expire"`
 			KeyLength    int    `survey:"keylength"`
 			GroupSize    int    `survey:"groupsize"`
 		}{}
@@ -53,7 +54,7 @@ func initialize(c *cli.Context) error {
 				Name: "keys",
 				Prompt: &survey.Input{
 					Message: "Enter number of initial keys to generate:",
-					Default: fmt.Sprintf("%d", o.numberOfKeys),
+					Default: fmt.Sprintf("%d", o.keys),
 				},
 				Validate: func(val interface{}) error {
 					str, ok := val.(string)
@@ -75,6 +76,13 @@ func initialize(c *cli.Context) error {
 				Prompt: &survey.Input{
 					Message: "Enter keepers of the initial keys (leave empty for anonymous):",
 					Help:    "Enter a single call-sign or multiple separated with comma or space",
+				},
+			},
+			{
+				Name: "expire",
+				Prompt: &survey.Input{
+					Message: "Enter expiry date as a Date-Time Group or empty for default:",
+					Help:    "Date-Time Group format is DDHHMMZmmmYY where DD = day of month, HH = hour, MM = minute, Z = mil time zone, mmm = abbrev. month, and YY = year w/o century",
 				},
 			},
 			{
@@ -126,7 +134,7 @@ func initialize(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		o.numberOfKeys = answers.NumberOfKeys
+		o.keys = answers.NumberOfKeys
 		ik := strings.Split(answers.Keepers, ",")
 		for i := range ik {
 			tk := strings.Split(strings.TrimSpace(ik[i]), " ")
@@ -140,6 +148,7 @@ func initialize(c *cli.Context) error {
 		ik = nil
 		o.keyLength = answers.KeyLength
 		o.groupSize = answers.GroupSize
+		o.expire = strings.TrimSpace(answers.Expire)
 	}
 
 	k := krypto431.New(krypto431.WithPersistence(o.persistence),
@@ -163,11 +172,15 @@ func initialize(c *cli.Context) error {
 		return err
 	}
 
-	if o.numberOfKeys > 0 {
-		if o.numberOfKeys > 5000 {
-			fmt.Printf("Generating %d keys"+LineBreak, o.numberOfKeys)
+	if o.keys > 0 {
+		var expiryDTG *string = nil
+		if utf8.RuneCountInString(o.expire) > 0 {
+			expiryDTG = &o.expire
 		}
-		err := k.GenerateKeys(o.numberOfKeys, o.keepers...)
+		if o.keys > 5000 {
+			fmt.Printf("Generating %d keys"+LineBreak, o.keys)
+		}
+		err := k.GenerateKeys(o.keys, expiryDTG, o.keepers...)
 		if err != nil {
 			return err
 		}

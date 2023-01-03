@@ -12,6 +12,17 @@ import (
 )
 
 func keys(c *cli.Context) error {
+	atLeastOneOfThem := []string{oList, oEdit, oNew, oDelete, oImport, oExport}
+	opCount := 0
+	for _, op := range atLeastOneOfThem {
+		if c.IsSet(op) {
+			opCount++
+		}
+	}
+	if opCount == 0 {
+		cli.ShowSubcommandHelp(c)
+		return nil
+	}
 	o := getOptions(c)
 	k := krypto431.New(krypto431.WithPersistence(o.persistence), krypto431.WithInteractive(true))
 	defer k.Wipe()
@@ -23,13 +34,20 @@ func keys(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-
 	vettedKeepers := krypto431.VettedKeepers(o.keepers...)
-
+	vettedKeys := krypto431.VettedKeys(o.keySlice...)
 	filterFunction := func(key *krypto431.Key) bool {
 		// Next is almost redundant as function selects all keys if no filters av been applied.
 		if o.all {
 			return true
+		}
+		if len(vettedKeys) > 0 {
+			for x := range vettedKeys {
+				if krypto431.EqualRunesFold(&key.Id, &vettedKeys[x]) {
+					return true
+				}
+			}
+			return false
 		}
 		if len(vettedKeepers) > 0 {
 			// List keys with keepers AND anonymous if --anonymous is given...
@@ -57,6 +75,9 @@ func keys(c *cli.Context) error {
 		if o.unused && key.Used {
 			return false
 		}
+		if o.expired && !key.IsExpired() {
+			return false
+		}
 		if c.IsSet(oValid) {
 			if key.Compromised {
 				return false
@@ -68,7 +89,93 @@ func keys(c *cli.Context) error {
 		return true
 	}
 
-	// list keys is a singleton, exit after listing
+	// delete keys
+	if c.IsSet(oDelete) && o.deleteItems {
+		keys := len(k.Keys)
+		if keys == 0 {
+			fmt.Fprintf(os.Stderr, "There are no keys in %s."+LineBreak, k.GetPersistence())
+			return nil
+		}
+		deleted := 0
+		if !o.yes {
+			_, lines := k.SummaryOfKeys(filterFunction)
+			if len(lines) == 0 {
+				plural := ""
+				if keys > 1 {
+					plural = "s"
+				}
+				fmt.Fprintf(os.Stderr, "No key out of %d key"+plural+" in %s matched criteria."+LineBreak, keys, k.GetPersistence())
+				return nil
+			}
+			var keyStrings []string
+			for i := range lines {
+				keyStrings = append(keyStrings, string(lines[i]))
+			}
+			var response []string
+			prompt := &survey.MultiSelect{
+				Message:  "Select key(s) to delete",
+				Help:     "Columns are ID, KEEPERS, CREATED, EXPIRES, USED, COMPROMISED and COMMENT",
+				Options:  keyStrings,
+				PageSize: 20,
+			}
+			err := survey.AskOne(prompt, &response, survey.WithKeepFilter(true))
+			if err != nil {
+				return err
+			}
+			if len(response) == 0 {
+				fmt.Fprintln(os.Stderr, "No key(s) selected.")
+				return nil
+			}
+			err = k.DeleteKeysFromSummaryString(response...)
+			if err != nil {
+				return err
+			}
+			deleted = len(response)
+		} else {
+			// Do it, don't ask.
+			err = k.DeleteKey(vettedKeys...)
+			if err != nil {
+				return err
+			}
+			deleted = len(vettedKeys)
+		}
+		err = k.Save()
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "Deleted %d keys."+LineBreak, deleted)
+	}
+
+	// generate new keys
+	if c.IsSet(oNew) && o.newInt > 0 {
+		var expiryDTG *string = nil
+		if c.IsSet(oExpire) {
+			expiryDTG = &o.expire
+		}
+		err := k.GenerateKeys(o.newInt, expiryDTG, o.keepers...)
+		if err != nil {
+			return err
+		}
+		err = k.Save()
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "Generated %d keys"+LineBreak, o.newInt)
+	}
+
+	// import keys
+	if c.IsSet(oImport) {
+		fmt.Println("import goes here")
+	}
+
+	// export keys
+	if c.IsSet(oExport) {
+		k2 := k.ExportKeys(filterFunction)
+		defer k2.Wipe()
+
+	}
+
+	// list keys
 	if c.IsSet(oList) && o.listItems {
 		// First, ensure there are keys in this instance.
 		keys := len(k.Keys)
@@ -82,204 +189,13 @@ func keys(c *cli.Context) error {
 			if keys > 1 {
 				plural = "s"
 			}
-			fmt.Fprintf(os.Stderr, "No key out of %d key"+plural+" in %s matched select criteria."+LineBreak, keys, k.GetPersistence())
+			fmt.Fprintf(os.Stderr, "No key out of %d key"+plural+" in %s matched criteria."+LineBreak, keys, k.GetPersistence())
 			return nil
 		}
 		// Print lines of keys...
 		fmt.Println(strings.TrimRight(string(header), " "))
 		for i := range lines {
 			fmt.Println(strings.TrimRight(string(lines[i]), " "))
-		}
-		return nil
-	}
-
-	// generate new keys function is also a singleton
-	if c.IsSet(oNumberOfKeys) && o.numberOfKeys > 0 {
-		err = k.GenerateKeys(o.numberOfKeys, o.keepers...)
-		if err != nil {
-			return err
-		}
-		err = k.Save()
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(os.Stderr, "Generated %d keys"+LineBreak, o.numberOfKeys)
-		return nil
-	}
-
-	// delete keys
-	if c.IsSet(oDelete) && o.deleteItems {
-		keys := len(k.Keys)
-		if keys == 0 {
-			fmt.Fprintf(os.Stderr, "There are no keys in %s."+LineBreak, k.GetPersistence())
-			return nil
-		}
-		_, lines := k.SummaryOfKeys(filterFunction)
-		if len(lines) == 0 {
-			plural := ""
-			if keys > 1 {
-				plural = "s"
-			}
-			fmt.Fprintf(os.Stderr, "No key out of %d key"+plural+" in %s matched select criteria."+LineBreak, keys, k.GetPersistence())
-			return nil
-		}
-		var keyStrings []string
-		for i := range lines {
-			keyStrings = append(keyStrings, string(lines[i]))
-		}
-		var response []string
-		prompt := &survey.MultiSelect{
-			Message:  "Select key(s) to delete",
-			Help:     "Columns are ID, KEEPERS, CREATED, EXPIRES, USED, COMPROMISED and COMMENT",
-			Options:  keyStrings,
-			PageSize: 20,
-		}
-		err := survey.AskOne(prompt, &response, survey.WithKeepFilter(true))
-		if err != nil {
-			return err
-		}
-		if len(response) == 0 {
-			fmt.Fprintln(os.Stderr, "No key(s) selected.")
-			return nil
-		}
-
-		err = k.DeleteKeysFromSummaryString(response...)
-		if err != nil {
-			return err
-		}
-		err = k.Save()
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(os.Stderr, "Deleted %d keys."+LineBreak, len(response))
-		return nil
-	}
-
-	// import keys
-
-	// export keys
-
-	return nil
-}
-
-func generateKeys(c *cli.Context) error {
-	persistence := c.String("file")
-	numberOfKeys := c.Int("keys")
-	keepers := c.StringSlice("keepers")
-	k := krypto431.New(krypto431.WithPersistence(persistence))
-	err := k.Load()
-	if err != nil {
-		return err
-	}
-	err = k.GenerateKeys(numberOfKeys, keepers...)
-	if err != nil {
-		return err
-	}
-	err = k.Save()
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Generated %d keys\n", numberOfKeys)
-	return nil
-}
-
-func listKeys(c *cli.Context) error {
-	persistence := c.String("file")
-	keepers := krypto431.VettedKeepers(c.StringSlice("keepers")...)
-	and := c.Bool("and")
-	all := c.Bool("all")
-	unusedOnly := c.Bool("unused")
-	usedOnly := c.Bool("used")
-
-	k := krypto431.New(krypto431.WithPersistence(persistence), krypto431.WithInteractive(true))
-	err := k.Load()
-	if err != nil {
-		return fmt.Errorf("unable to load %s: %w", persistence, err)
-	}
-
-	sv := fmt.Sprintf("%%-%ds", k.GroupSize+1)
-	headerFormat := sv + "%s" + LineBreak + sv + "%s" + LineBreak
-	anonKeyStr := "Unknown (anonymous key)"
-
-listKeysMainLoop:
-	for i := range k.Keys {
-		if unusedOnly && !usedOnly && k.Keys[i].Used {
-			continue
-		} else if !unusedOnly && usedOnly && !k.Keys[i].Used {
-			continue
-		}
-		if all {
-			kprs := anonKeyStr
-			if len(k.Keys[i].Keepers) > 0 {
-				kprs = strings.Join(krypto431.RunesToStrings(&k.Keys[i].Keepers), ", ")
-			}
-			fmt.Printf(headerFormat, "ID:", "Keepers:", string(k.Keys[i].Id), kprs)
-			groups, err := k.Keys[i].GroupsBlock()
-			if err != nil {
-				return err
-			}
-			fmt.Print(string(*groups) + LineBreak + LineBreak)
-			err = krypto431.Wipe(groups)
-			if err != nil {
-				return err
-			}
-		} else {
-			if len(keepers) > 0 {
-				// List keys with keepers (not anonymous).
-				if len(k.Keys[i].Keepers) > 0 {
-					if and {
-						for x := range keepers {
-							foundKey := false
-							for y := range k.Keys[i].Keepers {
-								if krypto431.EqualRunes(&keepers[x], &k.Keys[i].Keepers[y]) {
-									foundKey = true
-								}
-							}
-							if !foundKey {
-								continue listKeysMainLoop
-							}
-						}
-					} else {
-						foundOneKey := false
-					listKeysOrOuterLoop:
-						for x := range keepers {
-							for y := range k.Keys[i].Keepers {
-								if krypto431.EqualRunes(&keepers[x], &k.Keys[i].Keepers[y]) {
-									foundOneKey = true
-									break listKeysOrOuterLoop
-								}
-							}
-						}
-						if !foundOneKey {
-							continue
-						}
-					}
-					fmt.Printf(headerFormat, "ID:", "Keepers:", string(k.Keys[i].Id), strings.Join(krypto431.RunesToStrings(&k.Keys[i].Keepers), ", "))
-					groups, err := k.Keys[i].GroupsBlock()
-					if err != nil {
-						return err
-					}
-					fmt.Print(string(*groups) + LineBreak + LineBreak)
-					err = krypto431.Wipe(groups)
-					if err != nil {
-						return err
-					}
-				}
-			} else {
-				// List anonymous keys only.
-				if len(k.Keys[i].Keepers) == 0 {
-					fmt.Printf(headerFormat, "ID:", "Keepers:", string(k.Keys[i].Id), anonKeyStr)
-					groups, err := k.Keys[i].GroupsBlock()
-					if err != nil {
-						return err
-					}
-					fmt.Print(string(*groups) + LineBreak + LineBreak)
-					err = krypto431.Wipe(groups)
-					if err != nil {
-						return err
-					}
-				}
-			}
 		}
 	}
 	return nil

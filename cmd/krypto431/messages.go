@@ -33,7 +33,12 @@ func receiveMessage(c *cli.Context) error {
 func dev(c *cli.Context) error {
 	o := getOptions(c)
 	k := krypto431.New(krypto431.WithPersistence(o.persistence), krypto431.WithInteractive(true))
-	err := k.Load()
+	defer k.Wipe()
+	err := setSaltAndPFK(c, &k)
+	if err != nil {
+		return err
+	}
+	err = k.Load()
 	if err != nil {
 		return err
 	}
