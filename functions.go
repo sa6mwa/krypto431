@@ -9,6 +9,12 @@ import (
 
 // Functions not assigned to methods of more general use likely end up here.
 
+// Configure go-password-validator minimum entropy for the entire krypto431
+// package. Entropy limit is not instance-scoped (yet).
+func SetMinimumPasswordEntropyBits(entropy float64) {
+	MinimumPasswordEntropyBits = entropy
+}
+
 // Returns a rune slice where each group is separated by a space. If columns is
 // above 0 the function will insert a line break instead of a space before
 // extending beyond that column length. Don't forget to Wipe(myRuneSlice) when

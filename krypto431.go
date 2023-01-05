@@ -1,6 +1,7 @@
 package krypto431
 
 import (
+	_ "embed"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -13,30 +14,37 @@ import (
 	"github.com/sa6mwa/krypto431/crand"
 )
 
+//go:embed VERSION
+var Version string
+
 // defaults, most are exported
 const (
-	useCrandWipe               bool   = true
-	MinimumCallSignLength      int    = 2
-	DefaultGroupSize           int    = 5
-	DefaultKeyLength           int    = 350 // 70 groups, 5 groups per row is 14 rows total
-	DefaultColumns             int    = 110
-	DefaultKeyColumns          int    = 30
-	DefaultPersistence         string = "~/.krypto431.gob"
-	DefaultKeyCapacity         int    = 50000                                   // 50k keys
-	DefaultChunkCapacity       int    = 20                                      // 20 chunks
-	DefaultEncodedTextCapacity int    = DefaultKeyLength * 2                    // 700
-	DefaultMessageCapacity     int    = 10000                                   // 10k messages
-	DefaultPlainTextCapacity   int    = DefaultKeyLength * DefaultChunkCapacity // 7000
-	DefaultPBKDF2Iteration     int    = 310000                                  // https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
-	MinimumSupportedKeyLength  int    = 20
-	MinimumColumnWidth         int    = 85 // Trigraph table is 80 characters wide
-	MinimumSaltLength          int    = 32
-	MinimumPasswordLength      int    = 8
+	useCrandWipe                      bool    = true
+	MinimumCallSignLength             int     = 2
+	DefaultGroupSize                  int     = 5
+	DefaultKeyLength                  int     = 350 // 70 groups, 5 groups per row is 14 rows total
+	DefaultColumns                    int     = 110
+	DefaultKeyColumns                 int     = 30
+	DefaultPersistence                string  = "~/.krypto431.gob"
+	DefaultKeyCapacity                int     = 50000                                   // 50k keys
+	DefaultChunkCapacity              int     = 20                                      // 20 chunks
+	DefaultEncodedTextCapacity        int     = DefaultKeyLength * 2                    // 700
+	DefaultMessageCapacity            int     = 10000                                   // 10k messages
+	DefaultPlainTextCapacity          int     = DefaultKeyLength * DefaultChunkCapacity // 7000
+	DefaultPBKDF2Iteration            int     = 310000                                  // https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
+	DefaultMinimumPasswordEntropyBits float64 = 60
+	MinimumSupportedKeyLength         int     = 20
+	MinimumColumnWidth                int     = 85 // Trigraph table is 80 characters wide
+	MinimumSaltLength                 int     = 32
 	// Fixed salt for pbkdf2 derived keys. Can be changed using
 	// krypto431.New(krypto431.WithSalt(hexEncodedSaltString)) when initiating a
 	// new instance. You can use GenerateSalt() to generate a new salt for use in
 	// WithSalt() and your UI program.
 	DefaultSalt string = "d14461856f830fc5a1f9ba1b845fae5f61c54767ded39cf943174e6869b44476"
+)
+
+var (
+	MinimumPasswordEntropyBits float64 = DefaultMinimumPasswordEntropyBits
 )
 
 var (

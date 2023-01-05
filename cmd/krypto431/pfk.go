@@ -116,7 +116,7 @@ func managePFK(c *cli.Context) error {
 			}
 		} else {
 			// Use default interactive method and ask for a new passphrase.
-			pwd, err := krypto431.AskAndConfirmPassword(krypto431.NewEncryptionPrompt, krypto431.MinimumPasswordLength)
+			pwd, err := krypto431.AskAndConfirmPassword(krypto431.NewEncryptionPrompt, krypto431.MinimumPasswordEntropyBits)
 			if err != nil {
 				return err
 			}
@@ -170,7 +170,7 @@ func generatePFK(c *cli.Context) error {
 			// A password has been supplied in clear-text, warning has already been
 			// issued in the help text so just use it...
 			pwd := []byte(o.password)
-			err := k.DerivePFKFromPassword(&pwd)
+			err := k.DerivePFKFromPasswordWithValidation(&pwd)
 			if err != nil {
 				return err
 			}
@@ -178,7 +178,7 @@ func generatePFK(c *cli.Context) error {
 		} else {
 			// Neither the random option or password has been supplied, ask for a
 			// password/passphrase...
-			pwd, err := krypto431.AskAndConfirmPassword(krypto431.EncryptionPrompt, krypto431.MinimumPasswordLength)
+			pwd, err := krypto431.AskAndConfirmPassword(krypto431.EncryptionPrompt, krypto431.MinimumPasswordEntropyBits)
 			if err != nil {
 				return err
 			}

@@ -20,6 +20,7 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	stream "github.com/nknorg/encrypted-stream"
 	"github.com/sa6mwa/krypto431/crand"
+	passwordvalidator "github.com/wagslane/go-password-validator"
 	"golang.org/x/crypto/pbkdf2"
 	"golang.org/x/term"
 )
@@ -36,12 +37,13 @@ var (
 )
 
 var (
-	ErrNoSalt           = errors.New(errUnableToDerivePFK + "instance is missing salt")
-	ErrTooShortSalt     = errors.New(errUnableToDerivePFK + "salt is too short")
-	ErrPasswordTooShort = fmt.Errorf(errUnableToDerivePFK+"too short, must be at least %d characters long", MinimumPasswordLength)
-	ErrNilPFK           = errors.New("instance is missing key needed to encrypt or decrypt persistence")
-	ErrInvalidPFK       = errors.New("persistence file key is invalid, must be 32 bytes long")
-	ErrPasswordInput    = errors.New("password input error")
+	ErrNoSalt       = errors.New(errUnableToDerivePFK + "instance is missing salt")
+	ErrTooShortSalt = errors.New(errUnableToDerivePFK + "salt is too short")
+	//ErrPasswordTooShort = fmt.Errorf(errUnableToDerivePFK+"too short, must be at least %d characters long", MinimumPasswordLength)
+	ErrNilPFK         = errors.New("instance is missing key needed to encrypt or decrypt persistence")
+	ErrInvalidPFK     = errors.New("persistence file key is invalid, must be 32 bytes long")
+	ErrPasswordInput  = errors.New("password input error")
+	ErrCopyKeyFailure = errors.New("copy key failure")
 )
 
 // DerivePFKFromPassword uses PBKDF2 to produce the 32 byte long key used to
@@ -59,8 +61,32 @@ func (k *Krypto431) DerivePFKFromPassword(password *[]byte) error {
 	if len(*k.salt) < MinimumSaltLength {
 		return ErrTooShortSalt
 	}
-	if len(*password) < MinimumPasswordLength {
-		return ErrPasswordTooShort
+	entropyBits := passwordvalidator.GetEntropy(string(*password))
+	err := passwordvalidator.Validate(string(*password), MinimumPasswordEntropyBits)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: %v (%.0f<%.0f)"+LineBreak, err, entropyBits, MinimumPasswordEntropyBits)
+	}
+	dk := pbkdf2.Key(*password, *k.salt, DefaultPBKDF2Iteration, 32, sha256.New)
+	k.persistenceKey = &dk
+	return nil
+}
+
+// Same as DerivePFKFromPassword, but validates the password against
+// go-password-validator according to set minimum entropy bits.
+func (k *Krypto431) DerivePFKFromPasswordWithValidation(password *[]byte) error {
+	if password == nil {
+		return ErrNilPointer
+	}
+	defer WipeBytes(password)
+	if k.salt == nil {
+		return ErrNoSalt
+	}
+	if len(*k.salt) < MinimumSaltLength {
+		return ErrTooShortSalt
+	}
+	err := passwordvalidator.Validate(string(*password), MinimumPasswordEntropyBits)
+	if err != nil {
+		return err
 	}
 	dk := pbkdf2.Key(*password, *k.salt, DefaultPBKDF2Iteration, 32, sha256.New)
 	k.persistenceKey = &dk
@@ -151,8 +177,8 @@ func (k *Krypto431) SetPFKFromString(key string) error {
 }
 
 // Similar to SetPFKFromString() except it derives the key from a passphrase via
-// the PBKDF2 function DerivePFKFromPassword(). The instance's configured salt
-// is used and need to be set before calling this function.
+// the PBKDF2 function DerivePFKFromPassword. The instance's
+// configured salt is used and need to be set before calling this function.
 func (k *Krypto431) SetPFKFromPassword(password string) error {
 	byteKey := []byte(password)
 	err := k.DerivePFKFromPassword(&byteKey)
@@ -202,9 +228,41 @@ func AskForPassword(prompt string, minimumLength int) *[]byte {
 	return &pw
 }
 
+func AskAndConfirmPassword(prompt string, minimumEntropyBits float64) (*[]byte, error) {
+	var pwd1 *[]byte
+	var pwd2 *[]byte
+	for {
+		pwd1 = AskForPassword(prompt, 0)
+		if pwd1 == nil {
+			return nil, ErrPasswordInput
+		}
+		entropyBits := passwordvalidator.GetEntropy(string(*pwd1))
+		err := passwordvalidator.Validate(string(*pwd1), minimumEntropyBits)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Denied: %v (%.0f<%.0f)"+LineBreak, err, entropyBits, MinimumPasswordEntropyBits)
+			WipeBytes(pwd1)
+			continue
+		} else {
+			fmt.Fprintf(os.Stderr, "OK: Password entropy is %.0f"+LineBreak, entropyBits)
+		}
+		pwd2 = AskForPassword(prompt+RepeatPromptSuffix, 0)
+		if pwd2 == nil {
+			return nil, ErrPasswordInput
+		}
+		if bytes.Equal(*pwd1, *pwd2) {
+			WipeBytes(pwd2)
+			break
+		}
+		WipeBytes(pwd1)
+		WipeBytes(pwd2)
+		fmt.Fprintln(os.Stderr, "Sorry, the keys you entered did not match. Try again.")
+	}
+	return pwd1, nil
+}
+
 // Asks for password confirmation. Returns error if passwords don't match or a
 // byte slice pointer if they do.
-func AskAndConfirmPassword(prompt string, minimumLength int) (*[]byte, error) {
+func OldAskAndConfirmPassword(prompt string, minimumLength int) (*[]byte, error) {
 	var pwd1 *[]byte
 	var pwd2 *[]byte
 	for {
@@ -306,7 +364,7 @@ func (k *Krypto431) Save() error {
 	// Ask for password if instance key is empty and mode is interactive, fail otherwise.
 	if k.persistenceKey == nil {
 		if k.interactive {
-			pwd, err := AskAndConfirmPassword(EncryptionPrompt, MinimumPasswordLength)
+			pwd, err := AskAndConfirmPassword(EncryptionPrompt, MinimumPasswordEntropyBits)
 			if err != nil {
 				return err
 			}
@@ -359,7 +417,6 @@ func (k *Krypto431) Load() error {
 		}
 		k.persistence = filepath.Join(dirname, k.persistence[2:])
 	}
-
 	var f *os.File
 	_, err := os.Stat(k.persistence)
 	if err != nil {
@@ -368,11 +425,10 @@ func (k *Krypto431) Load() error {
 		}
 		return err
 	}
-
 	// Persistence file exists, ask for password if instance key is empty.
 	if k.persistenceKey == nil {
 		if k.interactive {
-			pwd := AskForPassword(DecryptionPrompt, MinimumPasswordLength)
+			pwd := AskForPassword(DecryptionPrompt, 0)
 			if pwd == nil {
 				return ErrPasswordInput
 			}
@@ -441,7 +497,7 @@ func (k *Krypto431) ExportKeys(filterFunction func(key *Key) bool, opts ...Optio
 		Columns:                       k.Columns,
 		KeyColumns:                    k.KeyColumns,
 		Keys:                          make([]Key, 0, len(k.Keys)),
-		Messages:                      make([]Message, 0, 0),
+		Messages:                      make([]Message, 0),
 		CallSign:                      RuneCopy(&k.CallSign),
 	}
 	for _, opt := range opts {
@@ -479,12 +535,14 @@ func (k *Krypto431) ExportKeys(filterFunction func(key *Key) bool, opts ...Optio
 // interactive mode is enabled, function will ask for confirmation before
 // overwriting. To force overwriting without asking, add
 // WithOverwriteExistingKeysOnImport(true).
-func (k *Krypto431) ImportKeys(filterFunction func(key *Key) bool, opts ...Option) (error, int) {
+func (k *Krypto431) ImportKeys(filterFunction func(key *Key) bool, opts ...Option) (int, error) {
 	keyCount := 0
 	incoming := New(opts...)
+	fmt.Fprintf(os.Stderr, "Importing keys from %s"+LineBreak, incoming.GetPersistence())
+
 	err := incoming.Load()
 	if err != nil {
-		return err, 0
+		return 0, err
 	}
 	defer incoming.Wipe()
 	for i := range incoming.Keys {
@@ -501,7 +559,7 @@ func (k *Krypto431) ImportKeys(filterFunction func(key *Key) bool, opts ...Optio
 					}
 					err := survey.AskOne(prompt, &overwrite)
 					if err != nil {
-						return err, keyCount
+						return keyCount, err
 					}
 					if !overwrite {
 						continue
@@ -512,25 +570,43 @@ func (k *Krypto431) ImportKeys(filterFunction func(key *Key) bool, opts ...Optio
 				}
 				err := k.DeleteKey(incoming.Keys[i].Id)
 				if err != nil {
-					return err, keyCount
+					return keyCount, err
 				}
 			}
-			importedKey := incoming.Keys[i]
-			importedKey.RemoveKeeper(k.CallSign).AddKeeper(importedKey.GetCallSign())
-
-			// Hand over this key to our instance (importedKey.instance = k)
-			importedKey.SetInstance(k)
-			k.Keys = append(k.Keys, importedKey)
+			// As the incoming key is wiped, copy rune slices to new key...
+			var newKey Key
+			newKey.Id = make([]rune, len(incoming.Keys[i].Id))
+			if copy(newKey.Id, incoming.Keys[i].Id) != len(incoming.Keys[i].Id) {
+				return keyCount, ErrCopyKeyFailure
+			}
+			newKey.Runes = make([]rune, len(incoming.Keys[i].Runes))
+			if copy(newKey.Runes, incoming.Keys[i].Runes) != len(incoming.Keys[i].Runes) {
+				return keyCount, ErrCopyKeyFailure
+			}
+			for _, z := range incoming.Keys[i].Keepers {
+				c := make([]rune, len(z))
+				if copy(c, z) != len(z) {
+					return keyCount, ErrCopyKeyFailure
+				}
+				newKey.Keepers = append(newKey.Keepers, c)
+			}
+			newKey.Created = incoming.Keys[i].Created
+			newKey.Expires = incoming.Keys[i].Expires
+			newKey.Used = incoming.Keys[i].Used
+			newKey.Compromised = incoming.Keys[i].Compromised
+			newKey.Comment = make([]rune, len(incoming.Keys[i].Comment))
+			if copy(newKey.Comment, incoming.Keys[i].Comment) != len(incoming.Keys[i].Comment) {
+				return keyCount, ErrCopyKeyFailure
+			}
+			newKey.instance = k
+			// Remove my call-sign from keepers, add incoming station's call-sign to
+			// keepers and hand over key to our instance (importedKey.instance = k).
+			newKey.RemoveKeeper(k.CallSign).AddKeeper(incoming.Keys[i].GetCallSign()).
+				SetInstance(k)
+			k.Keys = append(k.Keys, newKey)
 			keyCount++
-
-			/*
-				newKey := k.Keys[i]
-				newKey.instance = &n
-				n.Keys = append(n.Keys, newKey)
-
-			*/
 		}
 	}
 
-	return nil, keyCount
+	return keyCount, nil
 }

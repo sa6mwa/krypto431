@@ -11,8 +11,10 @@ import (
 )
 
 var (
-	version      string
-	ErrAssertion error = errors.New("assertion error")
+	version                  string
+	ErrAssertion             error = errors.New("assertion error")
+	ErrMissingImportFilename error = errors.New("filename to import keys from is missing")
+	ErrMissingExportFilename error = errors.New("filename to export keys to is missing")
 )
 
 var (
@@ -98,6 +100,17 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 				Aliases: []string{"P"},
 				EnvVars: []string{"KRYPTO_PASSWORD"},
 				Usage:   "Insecurely supply clear-text `password` to derive persistence key (avoid)",
+			},
+			&cli.Float64Flag{
+				Name:    oMinimumEntropy,
+				Aliases: []string{"M"},
+				EnvVars: []string{"KRYPTO_MINIMUM_ENTROPY"},
+				Usage:   "Set minimum allowed entropy bits for go-password-`val`idator",
+				Value:   krypto431.DefaultMinimumPasswordEntropyBits,
+				Action: func(ctx *cli.Context, f float64) error {
+					krypto431.SetMinimumPasswordEntropyBits(f)
+					return nil
+				},
 			},
 		},
 		Commands: []*cli.Command{

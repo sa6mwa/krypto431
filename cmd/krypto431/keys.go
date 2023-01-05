@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -167,9 +166,9 @@ func keys(c *cli.Context) error {
 	// import keys
 	if c.IsSet(oImport) {
 		if utf8.RuneCountInString(o.importItems) == 0 {
-			return errors.New("filename to import keys from is missing")
+			return ErrMissingImportFilename
 		}
-		err, numberOfKeysImported := k.ImportKeys(filterFunction, krypto431.WithPersistence(o.importItems))
+		numberOfKeysImported, err := k.ImportKeys(filterFunction, krypto431.WithPersistence(o.importItems), krypto431.WithInteractive(true))
 		if err != nil {
 			return err
 		}
@@ -187,7 +186,7 @@ func keys(c *cli.Context) error {
 	// export keys
 	if c.IsSet(oExport) {
 		if utf8.RuneCountInString(o.exportItems) == 0 {
-			return errors.New("filename to export keys to is missing")
+			return ErrMissingExportFilename
 		}
 		k2 := k.ExportKeys(filterFunction, krypto431.WithPersistence(o.exportItems), krypto431.WithOverwritePersistenceIfExists(o.yes))
 		defer k2.Wipe()
@@ -220,6 +219,9 @@ func keys(c *cli.Context) error {
 			eprintf("No key out of %d key"+plural+" in %s matched criteria."+LineBreak, keys, k.GetPersistence())
 			return nil
 		}
+		fmt.Printf("FILE=%s"+LineBreak+"KEEPER=%s TOTALKEYS=%d MESSAGES=%d"+LineBreak,
+			k.GetPersistence(), string(k.GetCallSign()),
+			len(k.Keys), len(k.Messages))
 		// Print lines of keys...
 		fmt.Println(strings.TrimRight(string(header), " "))
 		for i := range lines {

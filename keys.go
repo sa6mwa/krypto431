@@ -49,6 +49,8 @@ func (k *Krypto431) NewKey(expire time.Time, keepers ...string) *Key {
 	key.Created.Time = time.Now()
 	key.Expires.Time = expire
 	key.Keepers = VettedKeepers(keepers...)
+	// If the instance's call-sign is among the keepers, remove it.
+	key.RemoveKeeper(k.CallSign)
 	for { // if we already have 26*26*26*26*26 keys, this is an infinite loop :)
 		for i := range key.Id {
 			key.Id[i] = rune(crand.Intn(26)) + rune('A')
@@ -286,11 +288,12 @@ func (k *Krypto431) SummaryOfKeys(filterFunction func(key *Key) bool) (header []
 		} else {
 			columns = append(columns, withPadding([]rune("Anonymous"), predictedColumnSizes[1]+addSpace))
 		}
-		columns = append(columns, withPadding([]rune(kp[i].Created.String()), predictedColumnSizes[2]+addSpace))
-		columns = append(columns, withPadding([]rune(kp[i].Expires.String()), predictedColumnSizes[3]+addSpace))
-		columns = append(columns, withPadding([]rune(kp[i].UsedString()), predictedColumnSizes[4]+addSpace))
-		columns = append(columns, withPadding([]rune(kp[i].CompromisedString()), predictedColumnSizes[5]+addSpace))
-		columns = append(columns, withPadding([]rune(kp[i].Comment), predictedColumnSizes[6]+addSpace))
+		columns = append(columns,
+			withPadding([]rune(kp[i].Created.String()), predictedColumnSizes[2]+addSpace),
+			withPadding([]rune(kp[i].Expires.String()), predictedColumnSizes[3]+addSpace),
+			withPadding([]rune(kp[i].UsedString()), predictedColumnSizes[4]+addSpace),
+			withPadding([]rune(kp[i].CompromisedString()), predictedColumnSizes[5]+addSpace),
+			withPadding([]rune(kp[i].Comment), predictedColumnSizes[6]+addSpace))
 		var totalLineLength int
 		for x := range columns {
 			totalLineLength += len(columns[x])
