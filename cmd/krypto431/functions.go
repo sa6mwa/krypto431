@@ -146,12 +146,12 @@ func setSaltAndPFK(c *cli.Context, k *krypto431.Krypto431) error {
 		}
 	}
 	if c.IsSet(oPFK) {
-		err := k.SetKeyFromString(o.pfk)
+		err := k.SetPFKFromString(o.pfk)
 		if err != nil {
 			return err
 		}
 	} else if c.IsSet(oPassword) {
-		err := k.SetKeyFromPassword(o.password)
+		err := k.SetPFKFromPassword(o.password)
 		if err != nil {
 			return err
 		}

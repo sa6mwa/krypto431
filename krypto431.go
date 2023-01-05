@@ -59,6 +59,13 @@ var (
 	ErrFormatting         = errors.New("formatting error")
 )
 
+var (
+	Words = map[string]string{
+		"No":  "No",
+		"Yes": "Yes",
+	}
+)
+
 // Wiper interface (for Keys and Messages only). Not used internally in package.
 type Wiper interface {
 	Wipe() error
@@ -79,19 +86,20 @@ type GroupFormatter interface {
 // file (persistence) are not exported meaning values will not be persisted to
 // disk.
 type Krypto431 struct {
-	mx                           *sync.Mutex
-	persistence                  string
-	persistenceKey               *[]byte
-	salt                         *[]byte
-	overwritePersistenceIfExists bool
-	interactive                  bool
-	GroupSize                    int
-	KeyLength                    int
-	Columns                      int
-	KeyColumns                   int
-	Keys                         []Key
-	Messages                     []Message
-	CallSign                     []rune
+	mx                            *sync.Mutex
+	persistence                   string
+	persistenceKey                *[]byte
+	salt                          *[]byte
+	overwritePersistenceIfExists  bool
+	interactive                   bool
+	overwriteExistingKeysOnImport bool
+	GroupSize                     int
+	KeyLength                     int
+	Columns                       int
+	KeyColumns                    int
+	Keys                          []Key
+	Messages                      []Message
+	CallSign                      []rune
 }
 
 // Key struct holds a key. Keepers is a list of call-signs or other identifiers
@@ -436,17 +444,18 @@ func (c *chunk) ZeroWipe() error {
 // New creates a new Krypto431 instance.
 func New(opts ...Option) Krypto431 {
 	instance := Krypto431{
-		persistence:                  DefaultPersistence,
-		persistenceKey:               nil,
-		salt:                         nil,
-		overwritePersistenceIfExists: false,
-		interactive:                  false,
-		GroupSize:                    DefaultGroupSize,
-		KeyLength:                    DefaultKeyLength,
-		Columns:                      DefaultColumns,
-		KeyColumns:                   DefaultKeyColumns,
-		Keys:                         make([]Key, 0, DefaultKeyCapacity),
-		Messages:                     make([]Message, 0, DefaultMessageCapacity),
+		persistence:                   DefaultPersistence,
+		persistenceKey:                nil,
+		salt:                          nil,
+		overwritePersistenceIfExists:  false,
+		interactive:                   false,
+		overwriteExistingKeysOnImport: false,
+		GroupSize:                     DefaultGroupSize,
+		KeyLength:                     DefaultKeyLength,
+		Columns:                       DefaultColumns,
+		KeyColumns:                    DefaultKeyColumns,
+		Keys:                          make([]Key, 0, DefaultKeyCapacity),
+		Messages:                      make([]Message, 0, DefaultMessageCapacity),
 	}
 	salt, err := hex.DecodeString(DefaultSalt)
 	if err != nil {
@@ -466,12 +475,12 @@ func New(opts ...Option) Krypto431 {
 // Option fn type for the New() construct.
 type Option func(k *Krypto431)
 
-// WithKey overrides deriving the encryption key for the persistance-file from a
+// WithPFK overrides deriving the encryption key for the persistance-file from a
 // password by using the key directly. Must be 32 bytes long. Beware! Underlying
 // byte slice will be wiped when closing or wiping the Krypto431 instance, but
 // the New() function returns a reference not a pointer meaning there could
 // still be a copy of this key in memory after wiping.
-func WithKey(key *[]byte) Option {
+func WithPFK(key *[]byte) Option {
 	if key == nil || len(*key) != 32 {
 		return func(k *Krypto431) {
 			k.persistenceKey = nil
@@ -482,11 +491,11 @@ func WithKey(key *[]byte) Option {
 	}
 }
 
-// As WithKey, but takes a string and attempts to hex decode it into a byte
+// As WithPFK, but takes a string and attempts to hex decode it into a byte
 // slice. Not recommended to use as it doesn't fail on error just nils the key
-// and leaves memory traces that can not be wiped. Use SetKeyFromString() on the
+// and leaves memory traces that can not be wiped. Use SetPFKFromString() on the
 // instance after New() instead.
-func WithKeyString(hexEncodedString string) Option {
+func WithPFKString(hexEncodedString string) Option {
 	nilKeyFunc := func(k *Krypto431) {
 		k.persistenceKey = nil
 	}
@@ -581,6 +590,11 @@ func WithInteractive(b bool) Option {
 		k.interactive = b
 	}
 }
+func WithOverwriteExistingKeysOnImport(b bool) Option {
+	return func(k *Krypto431) {
+		k.overwriteExistingKeysOnImport = b
+	}
+}
 
 // Methods assigned to the main struct...
 
@@ -607,8 +621,25 @@ func (k *Krypto431) Assert() error {
 
 // SetInteractive is provided to set the interactive non-exported field in an
 // instance (true=on, false=off).
-func (k *Krypto431) SetInteractive(state bool) {
+func (k *Krypto431) SetInteractive(state bool) *Krypto431 {
 	k.interactive = state
+	return k
+}
+
+// SetOverwriteExistingKeysOnImport answers
+func (k *Krypto431) SetOverwriteExistingKeysOnImport(state bool) *Krypto431 {
+	k.overwriteExistingKeysOnImport = state
+	return k
+}
+
+// IsInteractive returns true if instance functions can work in interactive
+// mode.
+func (k *Krypto431) IsInteractive() bool {
+	return k.interactive
+}
+
+func (k *Krypto431) IsOverwriteExistingKeysOnImport() bool {
+	return k.overwriteExistingKeysOnImport
 }
 
 // Validates and sets the instance's call-sign.
@@ -619,6 +650,10 @@ func (k *Krypto431) SetCallSign(callsign string) error {
 	}
 	k.CallSign = cs
 	return nil
+}
+
+func (k *Krypto431) GetCallSign() []rune {
+	return k.CallSign
 }
 
 // Close is an alias for Krypto431.Wipe()

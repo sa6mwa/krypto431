@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	errUnableToDeriveKey string = "unable to derive key from password: "
+	errUnableToDerivePFK string = "unable to derive PFK from password: "
 )
 
 var (
@@ -36,19 +36,19 @@ var (
 )
 
 var (
-	ErrNoSalt           = errors.New(errUnableToDeriveKey + "instance is missing salt")
-	ErrTooShortSalt     = errors.New(errUnableToDeriveKey + "salt is too short")
-	ErrPasswordTooShort = fmt.Errorf(errUnableToDeriveKey+"too short, must be at least %d characters long", MinimumPasswordLength)
+	ErrNoSalt           = errors.New(errUnableToDerivePFK + "instance is missing salt")
+	ErrTooShortSalt     = errors.New(errUnableToDerivePFK + "salt is too short")
+	ErrPasswordTooShort = fmt.Errorf(errUnableToDerivePFK+"too short, must be at least %d characters long", MinimumPasswordLength)
 	ErrNilPFK           = errors.New("instance is missing key needed to encrypt or decrypt persistence")
 	ErrInvalidPFK       = errors.New("persistence file key is invalid, must be 32 bytes long")
 	ErrPasswordInput    = errors.New("password input error")
 )
 
-// DeriveKeyFromPassword uses PBKDF2 to produce the 32 byte long key used to
+// DerivePFKFromPassword uses PBKDF2 to produce the 32 byte long key used to
 // encrypt/decrypt the persistence file. The salt in the Krypto431 instance is
 // used to derive the key, either the default fixed salt or one that you
 // provided earlier (e.g krypto431.New(krypto431.WithSalt(my64charHexString))).
-func (k *Krypto431) DeriveKeyFromPassword(password *[]byte) error {
+func (k *Krypto431) DerivePFKFromPassword(password *[]byte) error {
 	if password == nil {
 		return ErrNilPointer
 	}
@@ -137,7 +137,7 @@ func (k *Krypto431) SetSaltFromString(salt string) error {
 // password-based method use byte or rune slices which are (or can be) wiped in
 // an attempt not to leave sensitive data around in memory after the program
 // exits.
-func (k *Krypto431) SetKeyFromString(key string) error {
+func (k *Krypto431) SetPFKFromString(key string) error {
 	byteKey, err := hex.DecodeString(key)
 	if err != nil {
 		return err
@@ -150,12 +150,12 @@ func (k *Krypto431) SetKeyFromString(key string) error {
 	return nil
 }
 
-// Similar to SetKeyFromString() except it derives the key from a passphrase via
-// the PBKDF2 function DeriveKeyFromPassword(). The instance's configured salt
+// Similar to SetPFKFromString() except it derives the key from a passphrase via
+// the PBKDF2 function DerivePFKFromPassword(). The instance's configured salt
 // is used and need to be set before calling this function.
-func (k *Krypto431) SetKeyFromPassword(password string) error {
+func (k *Krypto431) SetPFKFromPassword(password string) error {
 	byteKey := []byte(password)
-	err := k.DeriveKeyFromPassword(&byteKey)
+	err := k.DerivePFKFromPassword(&byteKey)
 	if err != nil {
 		return err
 	}
@@ -246,7 +246,7 @@ func GenerateSalt() string {
 // Generate a random 32 byte persistence file key for use when loading/saving
 // the persistence file. Returns a hex encoded string of 64 characters that you
 // can use as e.g environment variable and is compatible with
-// SetKeyFromString(). Beware that strings are immutable in Go - the internal
+// SetPFKFromString(). Beware that strings are immutable in Go - the internal
 // wipe functions can not be used to clear this sensitive data. The default
 // password-based method in Load() and Save() use byte or rune slices which are
 // (or can be) wiped in an attempt not to leave sensitive data around in memory
@@ -263,10 +263,8 @@ func GeneratePFK() string {
 
 // Krypto431_Save persists a Krypto431 instance to file. The output file is a
 // gzipped GOB (Go Binary) which is XSalsa20Poly1305 encrypted using a 32 byte
-// key set via DeriveKeyFromPassword(), SetKeyFromString() or WithKey().
+// key set via DerivePFKFromPassword(), SetPFKFromString() or WithPFK().
 func (k *Krypto431) Save() error {
-	k.mx.Lock()
-	defer k.mx.Unlock()
 	if len(k.persistence) == 0 {
 		return ErrNoPersistence
 	}
@@ -312,7 +310,7 @@ func (k *Krypto431) Save() error {
 			if err != nil {
 				return err
 			}
-			err = k.DeriveKeyFromPassword(pwd)
+			err = k.DerivePFKFromPassword(pwd)
 			if err != nil {
 				return err
 			}
@@ -349,8 +347,6 @@ func (k *Krypto431) Save() error {
 // Krypto431_Load() loads a Krypto431 instance from the configured persistence
 // file (k.persistence). Only exported fields will be populated.
 func (k *Krypto431) Load() error {
-	k.mx.Lock()
-	defer k.mx.Unlock()
 	if len(k.persistence) == 0 {
 		return ErrNoPersistence
 	}
@@ -380,7 +376,7 @@ func (k *Krypto431) Load() error {
 			if pwd == nil {
 				return ErrPasswordInput
 			}
-			err := k.DeriveKeyFromPassword(pwd)
+			err := k.DerivePFKFromPassword(pwd)
 			if err != nil {
 				return err
 			}
@@ -435,17 +431,18 @@ func (k *Krypto431) Load() error {
 // override any copied field.
 func (k *Krypto431) ExportKeys(filterFunction func(key *Key) bool, opts ...Option) Krypto431 {
 	n := Krypto431{
-		persistenceKey:               BytePtr(ByteCopy(k.persistenceKey)),
-		salt:                         BytePtr(ByteCopy(k.salt)),
-		overwritePersistenceIfExists: false,
-		interactive:                  k.interactive,
-		GroupSize:                    k.GroupSize,
-		KeyLength:                    k.KeyLength,
-		Columns:                      k.Columns,
-		KeyColumns:                   k.KeyColumns,
-		Keys:                         make([]Key, 0, len(k.Keys)),
-		Messages:                     make([]Message, 0, 0),
-		CallSign:                     RuneCopy(&k.CallSign),
+		persistenceKey:                BytePtr(ByteCopy(k.persistenceKey)),
+		salt:                          BytePtr(ByteCopy(k.salt)),
+		overwritePersistenceIfExists:  false,
+		interactive:                   k.interactive,
+		overwriteExistingKeysOnImport: false,
+		GroupSize:                     k.GroupSize,
+		KeyLength:                     k.KeyLength,
+		Columns:                       k.Columns,
+		KeyColumns:                    k.KeyColumns,
+		Keys:                          make([]Key, 0, len(k.Keys)),
+		Messages:                      make([]Message, 0, 0),
+		CallSign:                      RuneCopy(&k.CallSign),
 	}
 	for _, opt := range opts {
 		opt(&n)
@@ -464,15 +461,76 @@ func (k *Krypto431) ExportKeys(filterFunction func(key *Key) bool, opts ...Optio
 }
 
 // Krypto431_ImportKeys() does the opposite of ExportKeys(). The filterFunction
-// is run on the keys inside the persistence file specified in the opts variadic
-// using WithPersistence(filename), for example:
+// runs on each key from the persistence file specified in the opts variadic
+// WithPersistence(filename), for example:
 //
-
+//	ImportKeys(myFilter, krypto431.WithPersistence(filename), krypto431.WithInteractive(true))
+//
+// The default salt is used when loading the file and the PFK is empty. Load()
+// will interactively ask for password only if WithInteractive(true) is provided
+// as an option or it will return an error. To override PFK and/or salt, use
+// WithPFK() or WithPFKString(), WithSalt() or WithSaltString(). To use the key
+// and salt from the current instance for the imported instance, you can do the
+// following:
+//
+//	k.ImportKeys(f, WithPersistence(file), WithPFK(k.GetPFK()), WithSalt(k.GetSalt()))
+//
+// If an imported key ID already exists in the receiving instance and
+// interactive mode is enabled, function will ask for confirmation before
+// overwriting. To force overwriting without asking, add
+// WithOverwriteExistingKeysOnImport(true).
 func (k *Krypto431) ImportKeys(filterFunction func(key *Key) bool, opts ...Option) (error, int) {
 	keyCount := 0
-	importedInstance := New(opts...)
+	incoming := New(opts...)
+	err := incoming.Load()
+	if err != nil {
+		return err, 0
+	}
+	defer incoming.Wipe()
+	for i := range incoming.Keys {
+		if len(incoming.Keys[i].Id) != k.GroupSize {
+			fmt.Fprintf(os.Stderr, "Key ID %s is not %d characters long (our group size), will not import.", string(incoming.Keys[i].Id), k.GroupSize)
+			continue
+		}
+		if filterFunction(&incoming.Keys[i]) {
+			if k.ContainsKeyId(&incoming.Keys[i].Id) {
+				if !k.overwriteExistingKeysOnImport && k.interactive {
+					overwrite := false
+					prompt := &survey.Confirm{
+						Message: fmt.Sprintf("Key ID %s already exist, replace with imported key?", string(incoming.Keys[i].Id)),
+					}
+					err := survey.AskOne(prompt, &overwrite)
+					if err != nil {
+						return err, keyCount
+					}
+					if !overwrite {
+						continue
+					}
+				} else if !k.overwriteExistingKeysOnImport {
+					fmt.Fprintf(os.Stderr, "Key ID %s already exist, will not import.", string(incoming.Keys[i].Id))
+					continue
+				}
+				err := k.DeleteKey(incoming.Keys[i].Id)
+				if err != nil {
+					return err, keyCount
+				}
+			}
+			importedKey := incoming.Keys[i]
+			importedKey.RemoveKeeper(k.CallSign).AddKeeper(importedKey.GetCallSign())
 
-	// continue here
+			// Hand over this key to our instance (importedKey.instance = k)
+			importedKey.SetInstance(k)
+			k.Keys = append(k.Keys, importedKey)
+			keyCount++
+
+			/*
+				newKey := k.Keys[i]
+				newKey.instance = &n
+				n.Keys = append(n.Keys, newKey)
+
+			*/
+		}
+	}
 
 	return nil, keyCount
 }

@@ -13,8 +13,7 @@ import (
 )
 
 var (
-	HelpTextRadiogram string = `RADIOGRAM
-Message header as well as text body is entered as a radiogram in the old Swedish
+	HelpTextRadiogram string = `Message header as well as text body is entered as a radiogram in the old Swedish
 Armed Forces radiotelegraph message format (simplified ACP 124). Examples:
 TO1 TO2 TO3 DE FROM 012345 = Hello, this is the body of the message = K
 DE FROM This is the shortest form.
@@ -22,7 +21,7 @@ TO DE FROM 012345ZDEC22 COL 3 = ABCDE FGHIJ KLMNO = K
 TO DE FROM 012345 == TO2 TO3 == COL 2 = Hello world K
 TO DE FROM 012345 C = This is a broadcast message. +
 DE FROM 012345 4 = ABCDE FGHIJ KLMNO QRSTU = K
-*) TO is the call-sign(s) of the recipient(s).
+*) TO is(/are) the call-sign(s) of the recipient(s).
    FROM is your call-sign.
    012345 is a Date-Time Group (day hour minute, full format DDHHMMZmmmYY).
 `
@@ -95,8 +94,6 @@ DE FROM 012345 4 = ABCDE FGHIJ KLMNO QRSTU = K
 // override the key finder function (a used or compromised key will not be
 // allowed).
 func (k *Krypto431) NewTextMessage(msg ...string) error {
-	k.mx.Lock()
-	defer k.mx.Unlock()
 	if len(msg) == 0 {
 		return errors.New("no radiogram provided")
 	}
@@ -181,6 +178,16 @@ func (m *Message) GroupsBlock() (*[]rune, error) {
 
 func (m *Message) JoinRecipients(separator string) string {
 	return JoinRunesToString(&m.Recipients, separator)
+}
+
+// Return the Krypto431 instance (non-exported field) of a message.
+func (m *Message) GetInstance() *Krypto431 {
+	return m.instance
+}
+
+// Set instance of Krypto431 (non-exported field) for a message.
+func (m *Message) SetInstance(instance *Krypto431) {
+	m.instance = instance
 }
 
 // TODO: Implement! :)

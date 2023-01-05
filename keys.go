@@ -25,10 +25,20 @@ func (k *Krypto431) ContainsKeyId(keyId *[]rune) bool {
 	return false
 }
 
+func (k *Key) ContainsKeeper(keepers ...[]rune) bool {
+	if len(keepers) == 0 {
+		return len(k.Keepers) == 0
+	}
+	if AllNeedlesInHaystack(&keepers, &k.Keepers, true) {
+		return true
+	}
+	return false
+}
+
 // NewKey generates a new key. The current implementation generates a random
 // group not yet in the Krypto431 construct. Keepers can be one call-sign per
 // variadic, comma-separated call-signs or a combination of both.
-func (k *Krypto431) NewKey(expire time.Time, keepers ...string) *[]rune {
+func (k *Krypto431) NewKey(expire time.Time, keepers ...string) *Key {
 	key := Key{
 		Id:          make([]rune, k.GroupSize),
 		Runes:       make([]rune, int(int(math.Ceil(float64(k.KeyLength)/float64(k.GroupSize)))*k.GroupSize)),
@@ -57,13 +67,11 @@ func (k *Krypto431) NewKey(expire time.Time, keepers ...string) *[]rune {
 		key.Runes[i] = rune(crand.Intn(26)) + rune('A')
 	}
 	k.Keys = append(k.Keys, key)
-	return &key.Id
+	return &key
 }
 
 // DeleteKey removes one or more keys from the instance's Key slice.
 func (k *Krypto431) DeleteKey(keyIds ...[]rune) error {
-	k.mx.Lock()
-	defer k.mx.Unlock()
 	if len(keyIds) == 0 {
 		return nil
 	}
@@ -102,8 +110,6 @@ func (k *Krypto431) DeleteKeysFromSummaryString(summaryStrings ...string) error 
 // will expire one year from current time. If no keepers are provided, keys will
 // be considered anonymous.
 func (k *Krypto431) GenerateKeys(n int, expire *string, keepers ...string) error {
-	k.mx.Lock()
-	defer k.mx.Unlock()
 	var expiryTime time.Time
 	if expire == nil {
 		expiryTime = time.Now().Add(365 * 24 * time.Hour)
@@ -115,9 +121,50 @@ func (k *Krypto431) GenerateKeys(n int, expire *string, keepers ...string) error
 		expiryTime = d.Time
 	}
 	for i := 0; i < n; i++ {
-		_ = k.NewKey(expiryTime, keepers...)
+		k.NewKey(expiryTime, keepers...)
 	}
 	return nil
+}
+
+// AddKeeper adds keeper(s) to the Keepers slice if not already there. Can be
+// chained.
+func (k *Key) AddKeeper(keepers ...[]rune) *Key {
+	for _, keeper := range keepers {
+		if !k.ContainsKeeper(keeper) {
+			k.Keepers = append(k.Keepers, keeper)
+		}
+	}
+	return k
+}
+
+// RemoveKeeper removes keeper(s) from the Keepers slice if found. Can be
+// chained.
+func (k *Key) RemoveKeeper(keepers ...[]rune) *Key {
+	for _, keeper := range keepers {
+		for i := range k.Keepers {
+			if EqualRunesFold(&keeper, &k.Keepers[i]) {
+				k.Keepers[i] = k.Keepers[len(k.Keepers)-1]
+				k.Keepers = k.Keepers[:len(k.Keepers)-1]
+				break
+			}
+		}
+	}
+	return k
+}
+
+// Return the Krypto431 instance (non-exported field) of a key.
+func (k *Key) GetInstance() *Krypto431 {
+	return k.instance
+}
+
+// Set instance of Krypto431 (non-exported field) for a key. Can be chained.
+func (k *Key) SetInstance(instance *Krypto431) *Key {
+	k.instance = instance
+	return k
+}
+
+func (k *Key) GetCallSign() []rune {
+	return k.instance.CallSign
 }
 
 // KeyLength() returns the length of this key instance.
@@ -178,17 +225,17 @@ func (k *Key) IsValid(d time.Duration) bool {
 // output string with trailing spaces.
 func (k *Key) UsedString(rightSpacing ...int) string {
 	if k.Used {
-		return "Yes"
+		return Words["Yes"]
 	}
-	return "No"
+	return Words["No"]
 }
 
 // Returns Yes if key is marked compromised, No if not.
 func (k *Key) CompromisedString() string {
 	if k.Compromised {
-		return "Yes"
+		return Words["Yes"]
 	}
-	return "No"
+	return Words["No"]
 }
 
 // continue here TODO

@@ -26,6 +26,11 @@ var (
 	// encodeCharacter() and decodeCharacter().
 	// CharacterTablePrimary = `ABCDEFGHIJKLMNOP RSTUVWXY¤`,
 	// CharacterTableSecondary = `0123456789?-ÅÄÖ.Q,Z:+/¤¤¤¤`
+	//
+	// CODING LEGEND                    ⎘ Switch table (Z)
+	// IDX ABCDEFGHIJKLMNOPQRSTUVWXYZ   ⬔ Toggle binary mode (W)
+	// CT1 ABCDEFGHIJKLMNOP RSTUVWXY⎘   ↕ Toggle case (X)
+	// CT2 0123456789?-ÅÄÖ.Q,Z:+/⬔↕⌥⎘   ⌥ Change key (Y)
 	CharacterTables [][]rune = [][]rune{
 		CharacterTablePrimary, CharacterTableSecondary,
 	}
@@ -35,8 +40,8 @@ const (
 	primaryTable   int = 0
 	secondaryTable int = 1
 
-	// specialOpChar was dummyChar, means character has special meaning (a control
-	// character).
+	// specialOpChar (was dummyChar) means character has special meaning (a
+	// control character).
 	specialOpChar rune = '¤'
 
 	// binaryModeChar changes into a binary-only mode where A-P is one nibble

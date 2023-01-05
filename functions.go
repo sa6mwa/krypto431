@@ -44,9 +44,10 @@ func groups(input *[]rune, groupsize int, columns int) (*[]rune, error) {
 }
 
 // AllNeedlesInHaystack returns true is all needles can be found in the
-// haystack. Intended to find Keepers of Keys where needles are
+// haystack. Final variadic is optional, first true will match case-insensitive
+// instead of matching case. Intended to find Keepers of Keys where needles are
 // Message.Recipients and haystack is Key.Keepers.
-func AllNeedlesInHaystack(needles *[][]rune, haystack *[][]rune) bool {
+func AllNeedlesInHaystack(needles *[][]rune, haystack *[][]rune, caseInsensitive ...bool) bool {
 	if needles == nil || haystack == nil {
 		return false
 	}
@@ -56,8 +57,14 @@ func AllNeedlesInHaystack(needles *[][]rune, haystack *[][]rune) bool {
 loop:
 	for i := range *needles {
 		for x := range *haystack {
-			if EqualRunes(&(*haystack)[x], &(*needles)[i]) {
-				continue loop
+			if len(caseInsensitive) > 0 && caseInsensitive[0] {
+				if EqualRunesFold(&(*haystack)[x], &(*needles)[i]) {
+					continue loop
+				}
+			} else {
+				if EqualRunes(&(*haystack)[x], &(*needles)[i]) {
+					continue loop
+				}
 			}
 		}
 		return false
@@ -126,7 +133,7 @@ func VettedKeys(keys ...string) [][]rune {
 	return VettedKeepers(keys...)
 }
 
-// Function to compare two rune slices. Returns true if they are equal, false if
+// Compare two rune slices. Returns true if they are equal, false if
 // not.
 func EqualRunes(a *[]rune, b *[]rune) bool {
 	if a == nil && b == nil {
@@ -209,9 +216,9 @@ func predictColumnSizesOfKeys(keys []*Key) (columnSizes [7]int) {
 		// Created and Expires are fixed length
 		columnSizes[2] = len("012345ZJAN23")
 		columnSizes[3] = len("012345ZJAN23")
-		// Used and Compromised are always the length of their headers
-		columnSizes[4] = len("USED")
-		columnSizes[5] = len("COMPROMISED")
+		// Used and Compromised are normally the length of their headers
+		columnSizes[4] = HighestInt(len(Words["No"]), len(Words["Yes"]), len("USED"))
+		columnSizes[5] = HighestInt(len(Words["No"]), len(Words["Yes"]), len("COMPROMISED"))
 		for i := range keys {
 			if keys[i] == nil {
 				continue
@@ -249,6 +256,36 @@ func padding(s []rune, fieldLength int) (spaces []rune) {
 
 func withPadding(s []rune, fieldLength int) []rune {
 	return append(s, padding(s, fieldLength)...)
+}
+
+// Maximum int in int slice. Alternative MaxInt function.
+func HighestInt(number ...int) (highest int) {
+	if len(number) == 0 {
+		return 0
+	}
+	//highest = -int(^uint(0)>>1) - 1
+	highest = math.MinInt
+	for _, n := range number {
+		if n > highest {
+			highest = n
+		}
+	}
+	return
+}
+
+// Minimum int in int slice. Alternative MinInt function.
+func LowestInt(number ...int) (lowest int) {
+	if len(number) == 0 {
+		return 0
+	}
+	//lowest = int(^uint(0) >> 1)
+	lowest = math.MaxInt
+	for _, n := range number {
+		if n < lowest {
+			lowest = n
+		}
+	}
+	return
 }
 
 // Returns a copy of a rune slice.

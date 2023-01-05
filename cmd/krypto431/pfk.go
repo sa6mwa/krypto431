@@ -32,7 +32,7 @@ func managePFK(c *cli.Context) error {
 			return err
 		}
 		if c.IsSet(oOld) {
-			err := k.SetKeyFromPassword(o.old)
+			err := k.SetPFKFromPassword(o.old)
 			if err != nil {
 				return err
 			}
@@ -67,7 +67,7 @@ func managePFK(c *cli.Context) error {
 				}
 			}
 			newPFK := krypto431.GeneratePFK()
-			err := k.SetKeyFromString(newPFK)
+			err := k.SetPFKFromString(newPFK)
 			if err != nil {
 				return err
 			}
@@ -78,7 +78,7 @@ func managePFK(c *cli.Context) error {
 			}
 		} else if c.IsSet(oNew) {
 			// Use -N password
-			err := k.SetKeyFromPassword(o.new)
+			err := k.SetPFKFromPassword(o.new)
 			if err != nil {
 				return err
 			}
@@ -97,7 +97,7 @@ func managePFK(c *cli.Context) error {
 			}
 		} else if c.IsSet(oNewPFK) {
 			// Use supplied hex-encoded PFK from the -k option.
-			err := k.SetKeyFromString(o.newpfk)
+			err := k.SetPFKFromString(o.newpfk)
 			if err != nil {
 				return err
 			}
@@ -120,7 +120,7 @@ func managePFK(c *cli.Context) error {
 			if err != nil {
 				return err
 			}
-			err = k.DeriveKeyFromPassword(pwd)
+			err = k.DerivePFKFromPassword(pwd)
 			if err != nil {
 				return err
 			}
@@ -170,7 +170,7 @@ func generatePFK(c *cli.Context) error {
 			// A password has been supplied in clear-text, warning has already been
 			// issued in the help text so just use it...
 			pwd := []byte(o.password)
-			err := k.DeriveKeyFromPassword(&pwd)
+			err := k.DerivePFKFromPassword(&pwd)
 			if err != nil {
 				return err
 			}
@@ -182,7 +182,7 @@ func generatePFK(c *cli.Context) error {
 			if err != nil {
 				return err
 			}
-			err = k.DeriveKeyFromPassword(pwd)
+			err = k.DerivePFKFromPassword(pwd)
 			if err != nil {
 				return err
 			}

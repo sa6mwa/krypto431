@@ -200,7 +200,7 @@ func keys(c *cli.Context) error {
 		if keysExported == 0 || keysExported > 1 {
 			plural = "s"
 		}
-		eprintf("Exported %d key%s from %s to %s (change PFK/salt with the pfk command)."+LineBreak, keysExported, plural, keysExportedSentence, k.GetPersistence(), k2.GetPersistence())
+		eprintf("Exported %d key%s from %s to %s (change PFK/salt with the pfk command)."+LineBreak, keysExported, plural, k.GetPersistence(), k2.GetPersistence())
 	}
 
 	// list keys
