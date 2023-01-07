@@ -11,13 +11,6 @@ import (
 	"github.com/sa6mwa/krypto431/crand"
 )
 
-
-func (k *Key) GoString() string {
-	
-}
-
-
-
 // ContainsKeyId checks if the Krypto431.Keys slice already contains Id and
 // return true if it does, false if it does not.
 func (k *Krypto431) ContainsKeyId(keyId *[]rune) bool {
