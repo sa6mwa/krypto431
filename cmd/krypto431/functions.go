@@ -31,6 +31,8 @@ type options struct {
 	exportItems    string
 	importItems    string
 	deleteItems    bool
+	output         string
+	outputType     string
 	or             bool
 	all            bool
 	valid          int
@@ -70,6 +72,8 @@ const (
 	oExport         string = "export"
 	oImport         string = "import"
 	oDelete         string = "delete"
+	oOutput         string = "output"
+	oType           string = "type"
 	oOr             string = "or"
 	oAll            string = "all"
 	oValid          string = "valid"
@@ -112,6 +116,8 @@ func getOptions(c *cli.Context) options {
 		exportItems:    c.String(oExport),
 		importItems:    c.String(oImport),
 		deleteItems:    c.Bool(oDelete),
+		output:         c.String(oOutput),
+		outputType:     c.String(oType),
 		or:             c.Bool(oOr),
 		all:            c.Bool(oAll),
 		valid:          c.Int(oValid),

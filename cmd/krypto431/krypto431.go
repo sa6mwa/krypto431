@@ -235,7 +235,7 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 			},
 			{
 				Name:   "keys",
-				Usage:  "List, generate, export, import or delete key(s)",
+				Usage:  "List, generate, transport, delete or print key(s)",
 				Action: keys,
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
@@ -278,6 +278,17 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 						Name:    oExport,
 						Aliases: []string{"E"},
 						Usage:   "Export keys from main persistence to new `file`",
+					},
+					&cli.StringFlag{
+						Name:    oOutput,
+						Aliases: []string{"o"},
+						Usage:   "Write print-out of keys to `filename`",
+					},
+					&cli.StringFlag{
+						Name:    oType,
+						Aliases: []string{"t"},
+						Usage:   "Output `format` of -o file (pdf or txt)",
+						Value:   "pdf",
 					},
 					&cli.StringSliceFlag{
 						Name:    oKeepers,
@@ -337,6 +348,43 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 						Aliases: []string{"y"},
 						Usage:   "Force option, answer yes and/or do not prompt except of PFK",
 						Value:   false,
+					},
+				},
+			},
+			{
+				Name:    "messages",
+				Aliases: []string{"msg"},
+				Usage:   "List, write, receive, delete or print message(s)",
+				Action:  messages,
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:    oList,
+						Aliases: []string{"l"},
+						Value:   false,
+						Usage:   "List messages",
+					},
+					&cli.BoolFlag{
+						Name:    oNew,
+						Aliases: []string{"n"},
+						Usage:   "Write or receive a message",
+						Value:   false,
+					},
+					&cli.BoolFlag{
+						Name:    oDelete,
+						Aliases: []string{"d"},
+						Usage:   "Delete message(s)",
+						Value:   false,
+					},
+					&cli.StringFlag{
+						Name:    oOutput,
+						Aliases: []string{"o"},
+						Usage:   "Write print-out of messages to `filename`",
+					},
+					&cli.StringFlag{
+						Name:    oType,
+						Aliases: []string{"t"},
+						Usage:   "Output `type` of -o file (pdf or txt)",
+						Value:   "pdf",
 					},
 				},
 			},

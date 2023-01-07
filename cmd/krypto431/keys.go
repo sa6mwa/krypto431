@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/AlecAivazis/survey/v2"
@@ -223,9 +224,9 @@ func keys(c *cli.Context) error {
 			k.GetPersistence(), string(k.GetCallSign()),
 			len(k.Keys), len(k.Messages))
 		// Print lines of keys...
-		fmt.Println(strings.TrimRight(string(header), " "))
+		fmt.Println(strings.TrimRightFunc(string(header), unicode.IsSpace))
 		for i := range lines {
-			fmt.Println(strings.TrimRight(string(lines[i]), " "))
+			fmt.Println(strings.TrimRightFunc(string(lines[i]), unicode.IsSpace))
 		}
 	}
 	return nil

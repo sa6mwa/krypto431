@@ -664,6 +664,10 @@ func (k *Krypto431) GetCallSign() []rune {
 	return k.CallSign
 }
 
+func (k *Krypto431) CallSignString() string {
+	return string(k.CallSign)
+}
+
 // Close is an alias for Krypto431.Wipe()
 func (k *Krypto431) Close() {
 	k.Wipe()
