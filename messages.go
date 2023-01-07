@@ -3,13 +3,20 @@ package krypto431
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/sa6mwa/dtg"
+)
+
+var (
+	ErrNoRadiogramProvided = errors.New("no radiogram provided")
+	ErrParsingRadiogram    = errors.New("unable to parse radiogram")
 )
 
 var (
@@ -29,98 +36,149 @@ DE FROM 012345 4 = ABCDE FGHIJ KLMNO QRSTU = K
 	// Full message format (012345 = Date-Time Group, abbreviated or full e.g
 	// 012345AJAN23). Action addressees (adressmening), precedence or message
 	// instructions (tjänsteanmärkning) are all non-capturing groups.
-	//
-	// AA BB CC DE DD 012345 == XY ZZ/P == COL 3 = ABCDE FGHIJ KLMNO = K
-	//
-	// DE VP 012345 == BA == COL 3 = ABCDE FGHIJ KLMNO = K
-	//
-	// Group 1 = TO (can be empty),
-	// Group 2 = FROM,
-	// Group 3 = DTG (optional, can be empty!),
-	// Group 4 = Message text (will include trailing = K, K, +, etc)
+	//  AA BB CC DE DD 012345 == XY ZZ/P == COL 3 = ABCDE FGHIJ KLMNO = K
+	//  DE VP 012345 == BA == COL 3 = ABCDE FGHIJ KLMNO = K
+	//  Group 1 = TO (can be empty),
+	//  Group 2 = FROM,
+	//  Group 3 = DTG (optional, can be empty!),
+	//  Group 4 = Message text (will include trailing = K, K, +, etc)
 	MessageRegexpFull *regexp.Regexp = regexp.MustCompile(`(?i)([A-Z0-9/,\s]*)(?:\s+|^)DE\s+([A-Z0-9/]+)\s*([0-9]{6}[A-Z]{0,1}(?:JAN|FEB|MAR|APR|MAY|MAJ|JUN|JUL|AUG|SEP|OCT|OKT|NOV|DEC){0,1}(?:[0-9]{2}){0,1}){0,1}\s*==\s*(?:[A-Z0-9/,\s]*)\s*==\s*(?:[A-Z\s]*\s*[\d]*)\s*=\s*(.*)`)
 
 	// Semi-full message format, without message instructions (tjänsteanmärkning),
 	// optional group count (both are non-capturing groups).
-	//
-	// AA DE BB 012345 == VJ QJ 3 = ABCDE FGHIJ KLMNO = K
-	//
-	// AA DE BB 012345 == VJ QJ = HELLO WORLD = K
-	//
-	// Group 1 = TO (can be empty),
-	// Group 2 = FROM,
-	// Group 3 = DTG (optional, can be empty!),
-	// Group 4 = Message text (will include trailing = K, K, +, etc)
+	//  AA DE BB 012345 == VJ QJ 3 = ABCDE FGHIJ KLMNO = K
+	//  AA DE BB 012345 == VJ QJ = HELLO WORLD = K
+	//  Group 1 = TO (can be empty),
+	//  Group 2 = FROM,
+	//  Group 3 = DTG (optional, can be empty!),
+	//  Group 4 = Message text (will include trailing = K, K, +, etc)
 	MessageRegexpSemi *regexp.Regexp = regexp.MustCompile(`(?i)([A-Z0-9/,\s]*)(?:\s+|^)DE\s+([A-Z0-9/]+)\s*([0-9]{6}[A-Z]{0,1}(?:JAN|FEB|MAR|APR|MAY|MAJ|JUN|JUL|AUG|SEP|OCT|OKT|NOV|DEC){0,1}(?:[0-9]{2}){0,1}){0,1}\s*==\s*(?:[A-Z0-9/,\s]*\s*[\d]*)\s*=\s*(.*)`)
 
 	// Short message format.
-	//
-	// AA BB CC DE VJ 012345 COL = HELLO WORLD = SECTION 2 GOES HERE, INCLUDED IN TXT = K
-	//
-	// AA BB CC DE VJ 012345 = HELLO WORLD
-	//
-	// AA DE VJ = HELLO WORLD
-	//
-	// DE VJ = HELLO WORLD = K
-	//
-	// Group 1 = TO (can be empty),
-	// Group 2 = FROM,
-	// Group 3 = DTG (optional, can be empty!),
-	// Group 4 = Message text (will include trailing = K, K, +, etc)
+	//  AA BB CC DE VJ 012345 COL = HELLO WORLD = SECTION 2 GOES HERE, INCLUDED IN TXT = K
+	//  AA BB CC DE VJ 012345 = HELLO WORLD
+	//  AA DE VJ = HELLO WORLD
+	//  DE VJ = HELLO WORLD = K
+	//  Group 1 = TO (can be empty),
+	//  Group 2 = FROM,
+	//  Group 3 = DTG (optional, can be empty!),
+	//  Group 4 = Message text (will include trailing = K, K, +, etc)
 	MessageRegexpShort *regexp.Regexp = regexp.MustCompile(`(?i)([A-Z0-9/,\s]*)(?:\s+|^)DE\s+([A-Z0-9/]+)\s*([0-9]{6}[A-Z]{0,1}(?:JAN|FEB|MAR|APR|MAY|MAJ|JUN|JUL|AUG|SEP|OCT|OKT|NOV|DEC){0,1}(?:[0-9]{2}){0,1}){0,1}\s*(?:[A-Z]{0,4}\s*[\d]{0,4})\s*=\s*(.*)`)
 
 	// Even shorter format.
-	//
-	// DE SA6MWA HELLO WORLD
-	//
-	// AB DE ZY 012345 WELL, HELLO THERE = K
-	//
-	// Group 1 = TO (can be empty),
-	// Group 2 = FROM,
-	// Group 3 = DTG (optional, can be empty!),
-	// Group 4 = Message text (will include trailing = K, K, +, etc)
+	//  DE SA6MWA HELLO WORLD
+	//  AB DE ZY 012345 WELL, HELLO THERE = K
+	//  Group 1 = TO (can be empty),
+	//  Group 2 = FROM,
+	//  Group 3 = DTG (optional, can be empty!),
+	//  Group 4 = Message text (will include trailing = K, K, +, etc)
 	MessageRegexpMini *regexp.Regexp = regexp.MustCompile(`(?i)([A-Z0-9/,\s]*)(?:\s+|^)DE\s+([A-Z0-9/]+)\s*([0-9]{6}[A-Z]{0,1}(?:JAN|FEB|MAR|APR|MAY|MAJ|JUN|JUL|AUG|SEP|OCT|OKT|NOV|DEC){0,1}(?:[0-9]{2}){0,1}){0,1}\s*=*\s*(.*)`)
 
 	// Regexp to match trailing = K, K, +, [AR], AR, etc in a string (e.g to clean
 	// up the message text).
-	//
-	// MessageTrailRegexp.ReplaceAllString(messageText, "")
+	//  MessageTrailRegexp.ReplaceAllString(messageText, "")
 	MessageTrailRegexp *regexp.Regexp = regexp.MustCompile(`(?i)(\s*=\s*[K+]|\s[K+]|\s*\[AR\]|\s*=\s*AR)\s*$`)
 )
 
-// Creates a new message from a radiogram (Swedish Armed Forces telegraphy
-// radiogram which can be thought of as simplified ACP 124). First argument is a
+// NewTextMessage creates a new message from a radiogram (Swedish Armed Forces telegraphy
+// radiogram which can be thought of as simplified ACP 124). First argument is the
 // radiogram, optional second argument is a key ID which - if specified - will
-// override the key finder function (a used or compromised key will not be
-// allowed).
-func (k *Krypto431) NewTextMessage(msg ...string) error {
+// override the key finder function if message is an outgoing message (a used or
+// compromised key will not be allowed). If the From field (after DE in the
+// radiogram) has the same call-sign as the instance's CallSign the message is
+// considered an outgoing message. If From (DE) field is not your call-sign the
+// message is considered an incoming message.
+//
+// Outgoing messages (DE yourCallSign) will be enciphered with a key found
+// automatically or with key specified as an optional second argument.
+//
+// Incoming messages (DE notYourCallSign) will be attempted to be deciphered. If
+// deciphering fails and it is still a valid incoming enciphered message, the
+// cipher-text will stay in the PlainText field. The message function
+// TryDecipherPlainText can safely be run prior to future presentation of the
+// message, perhaps when the key - if initially missing in your store - has been
+// obtained, deciphering may succeed (for example).
+func (k *Krypto431) NewTextMessage(msg ...string) (*Message, error) {
 	if len(msg) == 0 {
-		return errors.New("no radiogram provided")
+		return nil, ErrNoRadiogramProvided
 	}
 	// Prepare new message object from radiogram.
 	message, err := k.ParseRadiogram(msg[0])
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if len(msg) >= 2 {
-		message.KeyId = []rune(strings.ToUpper(strings.TrimSpace(msg[2])))
-		if len(message.KeyId) != k.GroupSize {
-			return fmt.Errorf("key id \"%s\" must be %d characters long (the configured group size)", string(message.KeyId), k.GroupSize)
+	reset := true
+	defer func() {
+		if reset {
+			message.Wipe()
+		}
+	}()
+	// Incoming or outgoing message?
+	if message.IsMyCall() {
+		// Outgoing message...
+		fmt.Fprintln(os.Stderr, "outgoing")
+		if len(msg) >= 2 {
+			message.KeyId = []rune(strings.ToUpper(strings.TrimSpace(msg[2])))
+			if len(message.KeyId) != k.GroupSize {
+				return nil, fmt.Errorf("key id \"%s\" must be %d characters long (the configured group size)", string(message.KeyId), k.GroupSize)
+			}
+		}
+		err := message.Encipher()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// Incoming message...
+		fmt.Fprintln(os.Stderr, "incoming")
+		err := message.TryDecipherPlainText()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: %v"+LineBreak, err)
 		}
 	}
-	err = message.Encipher()
-	if err != nil {
-		return err
-	}
 	k.Messages = append(k.Messages, *message)
-	return nil
+	reset = false
+	return message, nil
 }
 
-// Krypto431.ParseRadiogram() attempts to break out the Recipients, From (DE),
-// Date-Time Group and PlainText from a Swedish Armed Forces radiotelegraphy
-// message formatted as transmitted. Function returns a pointer to a new Message
-// object. If DTG is empty, Message time will be set to current local system
-// time.
+// PromptNewTextMessage prompts the user to enter a a new text message as a
+// radiogram. Returns a pointer to the new message or error on failure.
+func (k *Krypto431) PromptNewTextMessage() (*Message, error) {
+	fmt.Print(HelpTextRadiogram)
+	var radiogram string
+	prompt := &survey.Multiline{
+		Message: fmt.Sprintf("Enter message as radiogram (your call is %s)", k.CallSignString()),
+	}
+	err := survey.AskOne(prompt, &radiogram)
+	if err != nil {
+		return nil, err
+	}
+	return k.NewTextMessage(radiogram)
+}
+
+// NewTextMessageFromReader is similar to PromptNewTextMessage except radiogram
+// is read from an io.Reader (until EOF). There is no output except
+// warnings/errors.
+// BUG(sa6mwa): NewTextMessage and ParseRadiogram need to implement io.Reader
+// instead.
+func (k *Krypto431) NewTextMessageFromReader(r io.Reader) (*Message, error) {
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	return k.NewTextMessage(string(b))
+}
+
+// ParseRadiogram attempts to break out the Recipients, From (DE), Date-Time
+// Group and PlainText from a Swedish Armed Forces radiotelegraphy message
+// formatted as transmitted/received. Function returns a pointer to a new
+// Message object. If DTG is empty, Message time will be set to current local
+// system time. ParseRadiogram will always put the radiogram text in the
+// PlainText field and leave KeyId empty. TryDecipherPlainText can be safely
+// called on the return message object (especially with dryrun==true) to
+// automatically attempt to identify the PlainText as CipherText with prepended
+// KeyId. By default, TryDecipherPlainText will attempt to decipher the
+// PlainText which will result in a populated KeyId and CipherText field as well
+// as the actual (deciphered) PlainText.
 func (k *Krypto431) ParseRadiogram(radiogram string) (*Message, error) {
 	m := &Message{
 		instance: k,
@@ -154,11 +212,10 @@ func (k *Krypto431) ParseRadiogram(radiogram string) (*Message, error) {
 				}
 			}
 			m.PlainText = []rune(strings.TrimSpace(MessageTrailRegexp.ReplaceAllString(matches[0][4], "")))
-			fmt.Printf("%+v\n", m)
 			return m, nil
 		}
 	}
-	return nil, errors.New("unable to parse radiogram")
+	return nil, ErrParsingRadiogram
 }
 
 // Groups for messages return a rune slice where each group (GroupSize) is
@@ -188,6 +245,12 @@ func (m *Message) GetInstance() *Krypto431 {
 // Set instance of Krypto431 (non-exported field) for a message.
 func (m *Message) SetInstance(instance *Krypto431) {
 	m.instance = instance
+}
+
+// IsMyCall returns true if From field is the same as the instance's call-sign,
+// false if not.
+func (m *Message) IsMyCall() bool {
+	return EqualRunesFold(&m.From, &m.instance.CallSign)
 }
 
 // TODO: Implement! :)

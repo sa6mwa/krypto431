@@ -49,7 +49,7 @@ var (
 
 var (
 	ErrNilPointer         = errors.New("received a nil pointer")
-	ErrNoCipherText       = errors.New("message cipher text is too short to decipher")
+	ErrCipherTextTooShort = errors.New("message cipher text is too short to decipher")
 	ErrNoKey              = errors.New("message has an invalid or no key")
 	ErrKeyNotFound        = errors.New("key not found")
 	ErrInvalidCoding      = errors.New("invalid character in encoded text (must be between A-Z)")
@@ -65,6 +65,7 @@ var (
 	ErrTooNarrow          = fmt.Errorf("column width must be at least %d characters wide", MinimumColumnWidth)
 	ErrKeyColumnsTooShort = errors.New("key column width less than group size")
 	ErrFormatting         = errors.New("formatting error")
+	ErrNotCipherText      = errors.New("plaintext not identified as ciphertext")
 )
 
 var (

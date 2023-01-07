@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 
-	"github.com/AlecAivazis/survey/v2"
 	"github.com/sa6mwa/krypto431"
 	"github.com/urfave/cli/v2"
 )
@@ -31,7 +30,7 @@ func messages(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	//vettedKeepers := krypto431.VettedKeepers(o.keepers...)
+	//vettedRecipients := krypto431.VettedRecipients(recipients...)
 
 	return nil
 }
@@ -72,33 +71,18 @@ func dev(c *cli.Context) error {
 	}
 	defer k.Wipe()
 
-	fmt.Print(krypto431.HelpTextRadiogram)
-	var radiogram string
-	prompt := &survey.Multiline{
-		Message: fmt.Sprintf("Enter message as radiogram (your call: %s)", k.CallSignString()),
-	}
-	err = survey.AskOne(prompt, &radiogram)
-	if err != nil {
-		return err
-	}
-
-	err = k.NewTextMessage(radiogram)
+	_, err = k.PromptNewTextMessage()
 	if err != nil {
 		return err
 	}
 
 	for i := range k.Messages {
-		err := k.Messages[i].Decipher()
-		if err != nil {
-			return err
-		}
+		fmt.Printf("%+v\n"+LineBreak, k.Messages[i])
 	}
 
-	if c.Bool("save") {
-		err := k.Save()
-		if err != nil {
-			return err
-		}
+	err = k.Save()
+	if err != nil {
+		return err
 	}
 
 	return nil

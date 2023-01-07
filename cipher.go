@@ -3,6 +3,7 @@ package krypto431
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"unicode"
 
@@ -45,9 +46,8 @@ const (
 	specialOpChar rune = '¤'
 
 	// binaryModeChar changes into a binary-only mode where A-P is one nibble
-	// (meaning that 1 rune is 2 characters). To exit the binary mode, issue W
-	// again and you return to the secondary character table in the non-binary
-	// mode.
+	// (meaning that 1 rune is 2 characters). To exit the binary mode, put W again
+	// and you return to the secondary character table in the non-binary mode.
 	binaryToggleChar rune = 'W'
 
 	// caseToggleChar adds strings.ToLower() on every character depending on previous
@@ -542,38 +542,34 @@ func (m *Message) EnrichWithKey() error {
 // Message object. Verbs encrypt and decrypt are only used for AES
 // encryption/decryption of the persistance file, while words encipher and
 // decipher are used for message ciphering in Krypto431.
-func (t *Message) Encipher() error {
-	err := t.EnrichWithKey()
+func (m *Message) Encipher() error {
+	err := m.EnrichWithKey()
 	if err != nil {
 		return fmt.Errorf("unable to enrich message with a key: %w", err)
 	}
-	Wipe(&t.CipherText)
-
+	Wipe(&m.CipherText)
 	// TODO: The encode phase should really go into a new Encode() function.
-	// Encode plaintext
+	//
+	// Encode plaintext...
 	state := newState()
-
 	// An encoded message contains one or more chunks. Each chunk is enciphered
 	// with a key. The last chunk need to fill out with table changers (Z) so that
 	// the sum of the length of all chunks are divided by GroupSize without a
 	// remainder (mod % GroupSize).
 	chunks := make([]chunk, 0, DefaultChunkCapacity)
-	chunk := newChunk(t.instance.GroupSize)
+	chunk := newChunk(m.instance.GroupSize)
 	// First chunk obviously uses the message key id...
-	keyPtr, err := t.instance.GetKey(t.KeyId)
+	keyPtr, err := m.instance.GetKey(m.KeyId)
 	if err != nil {
 		return err
 	}
 	chunk.key = keyPtr
-
 	// If something fails, we need to release all keys we have used.
 	releaseKeys := true
-	//defer func(do *bool) {
 	defer func() {
-		//if *do {
 		if releaseKeys {
-			t.instance.MarkKeyUsed(t.KeyId, false)
-			Wipe(&t.KeyId)
+			m.instance.MarkKeyUsed(m.KeyId, false)
+			Wipe(&m.KeyId)
 			chunk.key.Used = false
 			for i := range chunks {
 				chunks[i].key.Used = false
@@ -582,11 +578,9 @@ func (t *Message) Encipher() error {
 			chunk.Wipe()
 		}
 	}()
-	//}(&releaseKeys)
-
-	for i := range t.PlainText {
-		if state.charCounter >= chunk.key.KeyLength()-t.instance.GroupSize-ControlCharactersNeededToChangeKey {
-			keyPtr := t.instance.FindKey(t.Recipients...)
+	for i := range m.PlainText {
+		if state.charCounter >= chunk.key.KeyLength()-m.instance.GroupSize-ControlCharactersNeededToChangeKey {
+			keyPtr := m.instance.FindKey(m.Recipients...)
 			if keyPtr == nil {
 				return ErrOutOfKeys
 			}
@@ -596,33 +590,30 @@ func (t *Message) Encipher() error {
 			}
 			keyPtr.Used = true
 			chunks = append(chunks, chunk)
-			chunk = newChunk(t.instance.GroupSize)
+			chunk = newChunk(m.instance.GroupSize)
 			chunk.key = keyPtr
 			state.reset()
 		}
-
-		err := state.encodeCharacter(&t.PlainText[i], &chunk.encodedText)
+		err := state.encodeCharacter(&m.PlainText[i], &chunk.encodedText)
 		if err != nil {
 			return err
 		}
 	}
-
-	// count length of all chunks and make sure the last chunk compensates for modulo GroupSize
-	// length of all EncodedTexts.
+	// Count length of all chunks and make sure the last chunk compensates for
+	// modulo GroupSize length of all EncodedTexts.
 	// Last chunk is current chunk...
 	lengthOfAllEncodedTexts := len(chunk.encodedText)
 	for i := range chunks {
 		lengthOfAllEncodedTexts += len(chunks[i].encodedText)
 	}
-	err = state.pad((t.instance.GroupSize-(lengthOfAllEncodedTexts%t.instance.GroupSize))%t.instance.GroupSize, &chunk.encodedText)
+	err = state.pad((m.instance.GroupSize-(lengthOfAllEncodedTexts%m.instance.GroupSize))%m.instance.GroupSize, &chunk.encodedText)
 	if err != nil {
 		return err
 	}
 	// Finally, add the current chunk to the slice...
 	chunks = append(chunks, chunk)
-
 	//
-	// encipher() each EncodedText with each chunk's key...
+	// Encipher each encodedText with each chunk's key...
 	//
 	for i := range chunks {
 		if chunks[i].key == nil {
@@ -643,19 +634,18 @@ func (t *Message) Encipher() error {
 			if err != nil {
 				return err
 			}
-			t.CipherText = append(t.CipherText, output)
+			m.CipherText = append(m.CipherText, output)
 		}
 	}
-
+	// DEBUG: remove print-outs below...
 	for i := range chunks {
-		grouped, err := groups(&chunks[i].encodedText, t.instance.GroupSize, 0)
+		grouped, err := groups(&chunks[i].encodedText, m.instance.GroupSize, 0)
 		if err != nil {
 			return err
 		}
 		fmt.Printf("key: %s, enctxt: %s"+LineBreak, string(chunks[i].key.Id), string(*grouped))
 	}
-
-	grouped, err := groups(&t.CipherText, t.instance.GroupSize, 0)
+	grouped, err := groups(&m.CipherText, m.instance.GroupSize, 0)
 	if err != nil {
 		return err
 	}
@@ -665,56 +655,132 @@ func (t *Message) Encipher() error {
 	return nil
 }
 
-// Decipher() deciphers the CipherText field info the PlainText field of a
-// Message object. Decipher() does not use a separate decoding function as
-// simultaneous decoding is needed to support CipherText enciphered with
-// multiple keys.
-func (t *Message) Decipher() error {
-	if len(t.KeyId) != t.instance.GroupSize {
+// Decipher deciphers the CipherText field into the PlainText field of a Message
+// object. PlainText will be replaced with deciphered text if text already
+// exists. Decipher does not use a separate decoding function as simultaneous
+// decoding is needed to support CipherText enciphered with multiple keys. If
+// deciphering succeeds, all keys used in the message will be marked `used`.
+func (m *Message) Decipher() error {
+	if len(m.KeyId) != m.instance.GroupSize {
 		return ErrNoKey
 	}
-	if len(t.CipherText) < t.instance.GroupSize {
-		return ErrNoCipherText
+	if len(m.CipherText) < m.instance.GroupSize {
+		return ErrCipherTextTooShort
 	}
-	keyPtr, err := t.instance.GetKey(t.KeyId)
+	keyPtr, err := m.instance.GetKey(m.KeyId)
 	if err != nil {
 		return err
 	}
-	Wipe(&t.PlainText)
+	keyStack := make([]*Key, 0, DefaultChunkCapacity)
+	keyStack = append(keyStack, keyPtr)
+	markKeysUsed := false
+	defer func() {
+		if markKeysUsed {
+			for i := range keyStack {
+				keyStack[i].Used = true
+			}
+		}
+	}()
+	if keyPtr.Used {
+		fmt.Fprintf(os.Stderr, "Warning: key %s marked as already used!"+LineBreak, keyPtr.IdString())
+	}
+	Wipe(&m.PlainText)
 	keyIndexCounter := 0
-	nextKey := make([]rune, 0, t.instance.GroupSize)
+	nextKey := make([]rune, 0, m.instance.GroupSize)
 	state := newState()
-	for i := range t.CipherText {
+	for i := range m.CipherText {
 		var encodedChar rune
 		if keyIndexCounter >= len(keyPtr.Runes) {
-			fmt.Printf("%d (keylen=%d)\n", keyIndexCounter, len(keyPtr.Runes))
+			//fmt.Fprintf(os.Stderr, "%d (keylen=%d)\n", keyIndexCounter, len(keyPtr.Runes))
 			return fmt.Errorf("out-of-key error, %s is too short", string(keyPtr.Id))
 		}
-		err := diana.TrigraphRune(&encodedChar, &keyPtr.Runes[keyIndexCounter], &t.CipherText[i])
+		err := diana.TrigraphRune(&encodedChar, &keyPtr.Runes[keyIndexCounter], &m.CipherText[i])
 		if err != nil {
 			return err
 		}
 		keyIndexCounter++
-		err = state.decodeCharacter(&encodedChar, &t.PlainText)
+		err = state.decodeCharacter(&encodedChar, &m.PlainText)
 		if err != nil {
 			return err
 		}
 		if state.keyChange {
 			nextKey = append(nextKey, encodedChar)
-			if len(nextKey) >= t.instance.GroupSize {
+			if len(nextKey) >= m.instance.GroupSize {
 				var err error
-				keyPtr, err = t.instance.GetKey(nextKey)
+				keyPtr, err = m.instance.GetKey(nextKey)
 				if err != nil {
 					return err
 				}
+				keyStack = append(keyStack, keyPtr)
 				keyIndexCounter = 0
 				Wipe(&nextKey)
 				state.reset()
 			}
 		}
 	}
+	fmt.Println(string(m.PlainText))
+	markKeysUsed = true
+	return nil
+}
 
-	fmt.Println(string(t.PlainText))
-
+// TryDecipherPlainText attempts to identify PlainText that is actually
+// CipherText prepended with a key. If optional dryrun is not true, function
+// will copy possible key ID and ciphertext to the message and attempt to
+// decipher it. On failure to decipher, the message object (KeyId and PlainText)
+// is restored. Function will not run if the message has the KeyId filled in or
+// the first group of the PlainText (key ID) can not be found in the key store.
+// Returns error if CipherText detection/decipher was unsuccessful, nil if
+// successful.
+func (m *Message) TryDecipherPlainText(dryrun ...bool) error {
+	if len(m.KeyId) > 0 {
+		return ErrNotCipherText
+	}
+	filteredText := make([]rune, 0, len(m.PlainText))
+	defer Wipe(&filteredText)
+	for i := range m.PlainText {
+		switch {
+		case unicode.IsSpace(m.PlainText[i]), m.PlainText[i] == '=':
+			continue
+		}
+		c := unicode.ToUpper(m.PlainText[i])
+		if !(c >= 'A' && c <= 'Z') {
+			return ErrNotCipherText
+		}
+		filteredText = append(filteredText, c)
+	}
+	if len(filteredText) < m.instance.GroupSize*2 {
+		return ErrNotCipherText
+	}
+	key, err := m.instance.GetKey(filteredText[:m.instance.GroupSize])
+	if err != nil {
+		return fmt.Errorf("%v: %w", ErrNotCipherText, err)
+	}
+	// If optional dryrun == true, we are satisfied...
+	if len(dryrun) > 0 {
+		if dryrun[0] {
+			return nil
+		}
+	}
+	// First group in plaintext seem to be a key we have, try deciphering it...
+	restore := true
+	oldPlainText := RuneCopy(&m.PlainText)
+	oldCipherText := RuneCopy(&m.CipherText)
+	defer func() {
+		if restore {
+			Wipe(&m.KeyId)
+			m.PlainText = RuneCopy(&oldPlainText)
+			m.CipherText = RuneCopy(&oldCipherText)
+		}
+		Wipe(&oldPlainText)
+		Wipe(&oldCipherText)
+	}()
+	m.KeyId = RuneCopy(&key.Id)
+	cipherText := filteredText[m.instance.GroupSize:]
+	m.CipherText = RuneCopy(&cipherText)
+	err = m.Decipher()
+	if err != nil {
+		return fmt.Errorf("%v: %w", ErrNotCipherText, err)
+	}
+	restore = false
 	return nil
 }

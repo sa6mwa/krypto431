@@ -99,7 +99,7 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 				Name:    oPassword,
 				Aliases: []string{"P"},
 				EnvVars: []string{"KRYPTO_PASSWORD"},
-				Usage:   "Insecurely supply clear-text `password` to derive persistence key (avoid)",
+				Usage:   "Insecurely supply clear-text `pass`word to derive persistence key (avoid)",
 			},
 			&cli.Float64Flag{
 				Name:    oMinimumEntropy,

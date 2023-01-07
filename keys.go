@@ -11,6 +11,13 @@ import (
 	"github.com/sa6mwa/krypto431/crand"
 )
 
+
+func (k *Key) GoString() string {
+	
+}
+
+
+
 // ContainsKeyId checks if the Krypto431.Keys slice already contains Id and
 // return true if it does, false if it does not.
 func (k *Krypto431) ContainsKeyId(keyId *[]rune) bool {
@@ -92,14 +99,14 @@ func (k *Krypto431) DeleteKey(keyIds ...[]rune) error {
 
 // DeleteKeyString is an alias for DeleteKey() where key IDs are issued as
 // strings instead of rune slices.
-func (k *Krypto431) DeleteKeyString(keyIds ...string) error {
+func (k *Krypto431) DeleteKeyByString(keyIds ...string) error {
 	return k.DeleteKey(VettedKeys(keyIds...)...)
 }
 
 func (k *Krypto431) DeleteKeysFromSummaryString(summaryStrings ...string) error {
 	for i := range summaryStrings {
 		key, _, _ := strings.Cut(summaryStrings[i], " ")
-		err := k.DeleteKeyString(key)
+		err := k.DeleteKeyByString(key)
 		if err != nil {
 			return err
 		}
@@ -238,6 +245,10 @@ func (k *Key) CompromisedString() string {
 		return Words["Yes"]
 	}
 	return Words["No"]
+}
+
+func (k *Key) IdString() string {
+	return string(k.Id)
 }
 
 // continue here TODO
