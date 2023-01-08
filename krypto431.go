@@ -126,20 +126,21 @@ type Key struct {
 	instance    *Krypto431
 }
 
-// Message holds plaintext and ciphertext. To encrypt, you need to populate the
-// PlainText (OR Binary) and Recipients fields, the rest will be updated by the
-// Encrypt function which will choose the next available key. If PlainText is
-// longer than the key, the Encrypt function will use another key where the
-// key's Keepers field matches all of the Recipients. If there are not enough
-// keys to encrypt the message, Encrypt will fail. Encrypt will cache all
-// non-used keys from the database matching the Recipients into the instance
-// Keys slice before enciphering. To decrypt you need to have ciphertext in the
-// CipherText field and the start KeyId. All binary data in the message will be
-// appended to the Binary field. There is no method (yet) to figure out which of
-// your keys can be used to decipher the message. If the KeyId is not already in
-// your instace's Keys slice it will be fetched from the database or fail. The
-// KeyId should be the first group in your received message.
+// Message holds plaintext and ciphertext. To encipher, you need to populate the
+// PlainText (OR Binary) field, the rest will be updated by the Encipher
+// function which will choose the next available key. If PlainText is longer
+// than the key, the Encrypt function will use another key where the key's
+// Keepers field matches all of the Recipients. If there are not enough keys to
+// encrypt the message, Encrypt will fail. Encrypt will cache all non-used keys
+// from the database matching the Recipients into the instance Keys slice before
+// enciphering. To decrypt you need to have ciphertext in the CipherText field
+// and the start KeyId. All binary data in the message will be appended to the
+// Binary field. There is no method (yet) to figure out which of your keys can
+// be used to decipher the message. If the KeyId is not already in your
+// instace's Keys slice it will be fetched from the database or fail. The KeyId
+// should be the first group in your received message.
 type Message struct {
+	Id         []rune
 	Recipients [][]rune
 	From       []rune
 	DTG        dtg.DTG

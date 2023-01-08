@@ -3,9 +3,13 @@ package krypto431
 import (
 	"errors"
 	"math"
+	"os"
 	"regexp"
 	"strings"
 	"unicode"
+
+	"github.com/sa6mwa/krypto431/crand"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 // Functions not assigned to methods of more general use likely end up here.
@@ -25,6 +29,30 @@ func TrimRightRuneFunc(s []rune, f func(rune) bool) []rune {
 // package. Entropy limit is not instance-scoped (yet).
 func SetMinimumPasswordEntropyBits(entropy float64) {
 	MinimumPasswordEntropyBits = entropy
+}
+
+// RandomAlnumRunes generates a case-sensitive alpha-numeric string as a rune
+// slice of the length n. Returns a rune slice.
+func RandomAlnumRunes(n int) []rune {
+	id := make([]rune, n)
+	for i := range id {
+		//num := crand.Intn(26 + 26)
+		num := crand.Intn(26 + 26 + 10) // Max return number is n-1
+		switch {
+		case num < 26:
+			id[i] = rune(num) + rune('A')
+		case num >= 26 && num < 52:
+			id[i] = rune(num) - 26 + rune('a')
+		case num >= 52:
+			id[i] = rune(num) - 52 + rune('0')
+		}
+	}
+	return id
+}
+
+// IsTerminal returns true if os.Stdin is a terminal, false if not.
+func IsTerminal() bool {
+	return terminal.IsTerminal(int(os.Stdin.Fd()))
 }
 
 // Returns a rune slice where each group is separated by a space. If columns is
@@ -171,6 +199,26 @@ func VettedKeys(keys ...string) [][]rune {
 	return VettedKeepers(keys...)
 }
 
+// VettedMessageIds is NOT an alias for VettedKeepers :). Returns a slice of
+// rune slices where case is preserved from the input (message IDs are
+// case-sensitive). As with keepers, IDs can be space or comma separated.
+func VettedMessageIds(ids ...string) [][]rune {
+	var vettedMessageIds [][]rune
+	f := func(c rune) bool {
+		return c == ',' || c == ' '
+	}
+	for i := range ids {
+		subIds := strings.FieldsFunc(ids[i], f)
+		for a := range subIds {
+			vettedMessageId := []rune(strings.TrimSpace(subIds[a]))
+			if len(vettedMessageId) > 0 {
+				vettedMessageIds = append(vettedMessageIds, vettedMessageId)
+			}
+		}
+	}
+	return vettedMessageIds
+}
+
 // Compare two rune slices. Returns true if they are equal, false if
 // not.
 func EqualRunes(a *[]rune, b *[]rune) bool {
@@ -279,6 +327,45 @@ func predictColumnSizesOfKeys(keys []*Key) (columnSizes [7]int) {
 			if columnSizes[6] < clen {
 				columnSizes[6] = clen
 			}
+		}
+	}
+	return
+}
+
+func predictColumnSizesOfMessages(messages []*Message) (columnSizes [5]int) {
+	if len(messages) > 0 {
+		if messages[0] == nil {
+			return
+		}
+	}
+	// MessageId is pretty hard-coded
+	columnSizes[0] = 4
+	// DTG is fixed
+	columnSizes[1] = len("012345ZJAN23")
+	columnSizes[2] = len("TO")
+	columnSizes[3] = len("DE")
+	columnSizes[4] = 35 //len("DIGEST")
+	for i := range messages {
+		if messages[i] == nil {
+			continue
+		}
+		var recipientsLength int
+		if len(messages[i].Recipients) == 0 {
+			recipientsLength = len(NilRunes)
+			if columnSizes[2] < recipientsLength {
+				columnSizes[2] = recipientsLength
+			}
+		} else {
+			for x := range messages[i].Recipients {
+				recipientsLength += len(messages[i].Recipients[x]) + 1
+			}
+			if recipientsLength > 0 && columnSizes[2] < recipientsLength {
+				columnSizes[2] = recipientsLength - 1
+			}
+		}
+		fromLen := len(messages[i].From)
+		if columnSizes[3] < fromLen {
+			columnSizes[3] = fromLen
 		}
 	}
 	return

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/sa6mwa/krypto431"
 	"github.com/urfave/cli/v2"
 )
@@ -34,7 +35,7 @@ func messages(c *cli.Context) error {
 	}
 	vettedAddressees := krypto431.VettedCallSigns(o.to...)
 	vettedSenders := krypto431.VettedCallSigns(o.from...)
-
+	vettedMessageIds := krypto431.VettedMessageIds(o.idSlice...)
 	filterFunction := func(msg *krypto431.Message) bool {
 		if o.all {
 			return true
@@ -59,6 +60,61 @@ func messages(c *cli.Context) error {
 	}
 
 	// delete messages
+	if c.IsSet(oDelete) && o.deleteItems {
+		messages := len(k.Messages)
+		if messages == 0 {
+			eprintf("There are no messages in %s."+LineBreak, k.GetPersistence())
+			return nil
+		}
+		deleted := 0
+		if !o.yes {
+			_, lines := k.SummaryOfMessages(filterFunction)
+			if len(lines) == 0 {
+				plural := ""
+				if messages > 1 {
+					plural = "s"
+				}
+				eprintf("No message out of %d message"+plural+" in %s matched criteria."+LineBreak, messages, k.GetPersistence())
+				return nil
+			}
+			var messageStrings []string
+			for i := range lines {
+				messageStrings = append(messageStrings, string(lines[i]))
+			}
+			var response []string
+			prompt := &survey.MultiSelect{
+				Message:  "Select message(s) to delete",
+				Help:     "Columns are ID, DTG, TO, FROM (DE) and DIGEST",
+				Options:  messageStrings,
+				PageSize: 20,
+			}
+			err := survey.AskOne(prompt, &response, survey.WithKeepFilter(true))
+			if err != nil {
+				return err
+			}
+			if len(response) > 0 {
+				deleted, err = k.DeleteMessagesBySummaryString(response...)
+				if err != nil {
+					return err
+				}
+			}
+		} else {
+			// Do it, don't ask.
+			deleted, err = k.DeleteMessage(vettedMessageIds...)
+			if err != nil {
+				return err
+			}
+		}
+		if deleted > 0 {
+			err = k.Save()
+			if err != nil {
+				return err
+			}
+			eprintf("Deleted %d messages."+LineBreak, deleted)
+		} else {
+			eprintln("No messages were deleted.")
+		}
+	}
 
 	// new message
 

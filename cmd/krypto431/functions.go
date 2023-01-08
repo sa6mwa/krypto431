@@ -51,6 +51,7 @@ type options struct {
 	newpfk         string
 	to             []string
 	from           []string
+	idSlice        []string
 }
 
 const (
@@ -94,6 +95,7 @@ const (
 	oNewPFK         string = "new-pfk"
 	oTo             string = "to"
 	oFrom           string = "from"
+	oId             string = "id"
 )
 
 // For simplicity, collect all values and return a populated options object.
@@ -140,6 +142,7 @@ func getOptions(c *cli.Context) options {
 		newpfk:         c.String(oNewPFK),
 		to:             c.StringSlice(oTo),
 		from:           c.StringSlice(oFrom),
+		idSlice:        c.StringSlice(oId),
 	}
 }
 

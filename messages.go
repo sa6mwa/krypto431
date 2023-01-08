@@ -22,7 +22,7 @@ var (
 )
 
 var (
-	NilRunes          []rune = "NIL"
+	NilRunes          []rune = []rune("NIL")
 	HelpTextRadiogram string = `Message header as well as text body is entered as a radiogram according to the
 following simplified ACP 124 radiotelegraph message format:
 TO1 TO2 TO3 DE FROM 012345 = Hello, this is the body of the message = K
@@ -135,7 +135,7 @@ func (k *Krypto431) NewTextMessage(msg ...string) (*Message, error) {
 	// Incoming or outgoing message?
 	if message.IsMyCall() {
 		// Outgoing message...
-		fmt.Fprintln(os.Stderr, "outgoing")
+		//fmt.Fprintln(os.Stderr, "outgoing")
 		if len(msg) >= 2 {
 			message.KeyId = []rune(strings.ToUpper(strings.TrimSpace(msg[2])))
 			if len(message.KeyId) != k.GroupSize {
@@ -148,7 +148,11 @@ func (k *Krypto431) NewTextMessage(msg ...string) (*Message, error) {
 		}
 	} else {
 		// Incoming message...
-		fmt.Fprintln(os.Stderr, "incoming")
+		//fmt.Fprintln(os.Stderr, "incoming")
+		// Add yourself if there are no recipients (this is a shortcut for the shortest radiogram)
+		if len(message.Recipients) == 0 {
+			message.AddRecipient(k.GetCallSign())
+		}
 		err := message.TryDecipherPlainText()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: %v"+LineBreak, err)
@@ -202,6 +206,7 @@ func (k *Krypto431) NewTextMessageFromReader(r io.Reader) (*Message, error) {
 func (k *Krypto431) ParseRadiogram(radiogram string) (*Message, error) {
 	m := &Message{
 		instance: k,
+		Id:       k.NewUniqueMessageId(),
 	}
 	var matches [][]string
 	regexps := []*regexp.Regexp{MessageRegexpFull, MessageRegexpSemi, MessageRegexpShort, MessageRegexpMini}
@@ -237,6 +242,116 @@ func (k *Krypto431) ParseRadiogram(radiogram string) (*Message, error) {
 	}
 	return nil, ErrParsingRadiogram
 }
+
+// ContainsMessageId checks if the Krypto431.Messages slice already contains Id
+// and return true if it does, false if it does not.
+func (k *Krypto431) ContainsMessageId(msgId *[]rune) bool {
+	if msgId == nil {
+		return false
+	}
+	for i := range k.Messages {
+		if EqualRunes(&k.Messages[i].Id, msgId) {
+			return true
+		}
+	}
+	return false
+}
+
+// ContainsRecipient returns true if all recipients are recipients of this
+// message.
+func (m *Message) ContainsRecipient(recipients ...[]rune) bool {
+	if len(recipients) == 0 {
+		return len(m.Recipients) == 0
+	}
+	if AllNeedlesInHaystack(&recipients, &m.Recipients, true) {
+		return true
+	}
+	return false
+}
+
+// NewUniqueMessageId generates an alpha-numeric ID that is unique among the
+// instance's messages. Returns a rune slice of length 4.
+func (k *Krypto431) NewUniqueMessageId() []rune {
+	idLen := 4
+	id := make([]rune, idLen)
+	for { // If you already have 62*62*62*62 (14776336) messages, this is an infinite loop :)
+		id = RandomAlnumRunes(idLen)
+		if !k.ContainsMessageId(&id) {
+			break
+		}
+	}
+	return id
+}
+
+// AddRecipient adds recipient(s) to the Recipients slice if not already there. Can be
+// chained.
+func (m *Message) AddRecipient(recipients ...[]rune) *Message {
+	for _, recipient := range recipients {
+		if !m.ContainsRecipient(recipient) {
+			m.Recipients = append(m.Recipients, recipient)
+		}
+	}
+	return m
+}
+
+// RemoveRecipient removes recipient(s) from the Recipients slice if found. Can be
+// chained.
+func (m *Message) RemoveRecipient(recipients ...[]rune) *Message {
+	for _, recipient := range recipients {
+		for i := range m.Recipients {
+			if EqualRunesFold(&recipient, &m.Recipients[i]) {
+				m.Recipients[i] = m.Recipients[len(m.Recipients)-1]
+				m.Recipients = m.Recipients[:len(m.Recipients)-1]
+				break
+			}
+		}
+	}
+	return m
+}
+
+// DeleteMessage removes one or more messages from the instance's Messages slice
+// wiping the message before deleting it. Returns number of messages deleted or
+// error on failure.
+func (k *Krypto431) DeleteMessage(messageIds ...[]rune) (int, error) {
+	// TODO: error-handling is a future improvement.
+	deleted := 0
+	if len(messageIds) == 0 {
+		return 0, nil
+	}
+	for x := range messageIds {
+		for i := range k.Messages {
+			if EqualRunes(&k.Messages[i].Id, &messageIds[x]) {
+				k.Messages[i].Wipe()
+				k.Messages[i] = k.Messages[len(k.Messages)-1]
+				k.Messages = k.Messages[:len(k.Messages)-1]
+				deleted++
+				break
+			}
+		}
+	}
+	return deleted, nil
+}
+
+// DeleteMessageByString is an alias for DeleteMessage where message IDs are
+// issued as strings instead of rune slices.
+func (k *Krypto431) DeleteMessageByString(messageIds ...string) (int, error) {
+	return k.DeleteMessage(VettedMessageIds(messageIds...)...)
+}
+
+func (k *Krypto431) DeleteMessagesBySummaryString(summaryStrings ...string) (int, error) {
+	deleted := 0
+	for i := range summaryStrings {
+		id, _, _ := strings.Cut(summaryStrings[i], " ")
+		n, err := k.DeleteMessageByString(id)
+		if err != nil {
+			return deleted, err
+		}
+		deleted += n
+	}
+	return deleted, nil
+}
+
+
 
 // Groups for messages return a rune slice where each group (GroupSize) is
 // separated by space. Don't forget to Wipe() this slice when you are done!
@@ -295,7 +410,7 @@ func (k *Krypto431) SummaryOfMessages(filterFunction func(msg *Message) bool) (h
 
 	predictedColumnSizes := predictColumnSizesOfMessages(mp)
 
-	columnHeader := []string{"DTG", "TO", "DE", "DIGEST"}
+	columnHeader := []string{"ID", "DTG", "TO", "DE", "DIGEST"}
 	// Guard rail...
 	if len(predictedColumnSizes) != len(columnHeader) {
 		panic("wrong number of columns")
@@ -317,21 +432,33 @@ func (k *Krypto431) SummaryOfMessages(filterFunction func(msg *Message) bool) (h
 	// Populate lines rune slice with messages
 	for i := range mp {
 		var columns [][]rune
-		columns = append(columns, withPadding([]rune(mp[i].DTG.String()), predictedColumnSizes[0]+addSpace))
+		columns = append(columns,
+			withPadding(mp[i].Id, predictedColumnSizes[0]+addSpace),
+			withPadding([]rune(mp[i].DTG.String()), predictedColumnSizes[1]+addSpace))
 		if len(mp[i].Recipients) > 0 {
-			columns = append(columns, withPadding([]rune(mp[i].JoinRecipients(",")), predictedColumnSizes[1]+addSpace))
-		} else {
-			columns = append(columns, withPadding(NilRunes, predictedColumnSizes[1]+addSpace))
-		}
-		if len(mp[i].From) > 0 {
-			columns = append(columns, withPadding(mp[i].From, predictedColumnSizes[2]+addSpace))
+			columns = append(columns, withPadding([]rune(mp[i].JoinRecipients(",")), predictedColumnSizes[2]+addSpace))
 		} else {
 			columns = append(columns, withPadding(NilRunes, predictedColumnSizes[2]+addSpace))
 		}
+		if len(mp[i].From) > 0 {
+			columns = append(columns, withPadding(mp[i].From, predictedColumnSizes[3]+addSpace))
+		} else {
+			columns = append(columns, withPadding(NilRunes, predictedColumnSizes[3]+addSpace))
+		}
 		digest := blox.CutLineShort(WithoutLineBreaks(string(mp[i].PlainText)+string(mp[i].CipherText)), 35, true)
 		columns = append(columns, []rune(digest))
+		var totalLineLength int
+		for x := range columns {
+			totalLineLength += len(columns[x])
+		}
+		line := make([]rune, totalLineLength)
+		var y int
+		for z := range columns {
+			y += copy(line[y:], columns[z])
+		}
+		lines = append(lines, line)
 	}
-
+	return
 }
 
 // TODO: Implement! :)

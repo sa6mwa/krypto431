@@ -122,28 +122,28 @@ func keys(c *cli.Context) error {
 			if err != nil {
 				return err
 			}
-			if len(response) == 0 {
-				eprintln("No key(s) selected.")
-				return nil
+			if len(response) > 0 {
+				deleted, err = k.DeleteKeysBySummaryString(response...)
+				if err != nil {
+					return err
+				}
 			}
-			err = k.DeleteKeysFromSummaryString(response...)
-			if err != nil {
-				return err
-			}
-			deleted = len(response)
 		} else {
 			// Do it, don't ask.
-			err = k.DeleteKey(vettedKeys...)
+			deleted, err = k.DeleteKey(vettedKeys...)
 			if err != nil {
 				return err
 			}
-			deleted = len(vettedKeys)
 		}
-		err = k.Save()
-		if err != nil {
-			return err
+		if deleted > 0 {
+			err = k.Save()
+			if err != nil {
+				return err
+			}
+			eprintf("Deleted %d keys."+LineBreak, deleted)
+		} else {
+			eprintln("No keys were deleted.")
 		}
-		eprintf("Deleted %d keys."+LineBreak, deleted)
 	}
 
 	// generate new keys

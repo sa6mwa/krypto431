@@ -77,11 +77,13 @@ func (k *Krypto431) NewKey(expire time.Time, keepers ...string) *Key {
 	return &key
 }
 
-// DeleteKey removes one or more keys from the instance's Key slice. Function
-// wipes the key before deleting it.
-func (k *Krypto431) DeleteKey(keyIds ...[]rune) error {
+// DeleteKey removes one or more keys from the instance's Keys slice wiping the
+// key before deleting it. Returns number of keys deleted or error on failure.
+func (k *Krypto431) DeleteKey(keyIds ...[]rune) (int, error) {
+	// TODO: error-handling is a future improvement.
+	deleted := 0
 	if len(keyIds) == 0 {
-		return nil
+		return 0, nil
 	}
 	for x := range keyIds {
 		for i := range k.Keys {
@@ -89,28 +91,31 @@ func (k *Krypto431) DeleteKey(keyIds ...[]rune) error {
 				k.Keys[i].Wipe()
 				k.Keys[i] = k.Keys[len(k.Keys)-1]
 				k.Keys = k.Keys[:len(k.Keys)-1]
+				deleted++
 				break
 			}
 		}
 	}
-	return nil
+	return deleted, nil
 }
 
-// DeleteKeyString is an alias for DeleteKey() where key IDs are issued as
+// DeleteKeyByString is an alias for DeleteKey where key IDs are issued as
 // strings instead of rune slices.
-func (k *Krypto431) DeleteKeyByString(keyIds ...string) error {
+func (k *Krypto431) DeleteKeyByString(keyIds ...string) (int, error) {
 	return k.DeleteKey(VettedKeys(keyIds...)...)
 }
 
-func (k *Krypto431) DeleteKeysFromSummaryString(summaryStrings ...string) error {
+func (k *Krypto431) DeleteKeysBySummaryString(summaryStrings ...string) (int, error) {
+	deleted := 0
 	for i := range summaryStrings {
 		key, _, _ := strings.Cut(summaryStrings[i], " ")
-		err := k.DeleteKeyByString(key)
+		n, err := k.DeleteKeyByString(key)
 		if err != nil {
-			return err
+			return deleted, err
 		}
+		deleted += n
 	}
-	return nil
+	return deleted, nil
 }
 
 // GenerateKeys creates n amount of keys. The expire argument is a Date-Time

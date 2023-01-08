@@ -344,7 +344,7 @@ func (k *Krypto431) Save() error {
 	} else {
 		// persistence already exists
 		if !k.overwritePersistenceIfExists {
-			if k.interactive {
+			if k.interactive && IsTerminal() {
 				overwrite := false
 				prompt := &survey.Confirm{
 					Message: fmt.Sprintf("Overwrite %s?", k.persistence),
@@ -363,7 +363,7 @@ func (k *Krypto431) Save() error {
 	}
 	// Ask for password if instance key is empty and mode is interactive, fail otherwise.
 	if k.persistenceKey == nil {
-		if k.interactive {
+		if k.interactive && IsTerminal() {
 			pwd, err := AskAndConfirmPassword(EncryptionPrompt, MinimumPasswordEntropyBits)
 			if err != nil {
 				return err
@@ -427,7 +427,7 @@ func (k *Krypto431) Load() error {
 	}
 	// Persistence file exists, ask for password if instance key is empty.
 	if k.persistenceKey == nil {
-		if k.interactive {
+		if k.interactive && IsTerminal() {
 			pwd := AskForPassword(DecryptionPrompt, 0)
 			if pwd == nil {
 				return ErrPasswordInput
@@ -552,7 +552,7 @@ func (k *Krypto431) ImportKeys(filterFunction func(key *Key) bool, opts ...Optio
 		}
 		if filterFunction(&incoming.Keys[i]) {
 			if k.ContainsKeyId(&incoming.Keys[i].Id) {
-				if !k.overwriteExistingKeysOnImport && k.interactive {
+				if !k.overwriteExistingKeysOnImport && k.interactive && IsTerminal() {
 					overwrite := false
 					prompt := &survey.Confirm{
 						Message: fmt.Sprintf("Key ID %s already exist, replace with imported key?", string(incoming.Keys[i].Id)),
@@ -568,7 +568,7 @@ func (k *Krypto431) ImportKeys(filterFunction func(key *Key) bool, opts ...Optio
 					fmt.Fprintf(os.Stderr, "Key ID %s already exist, will not import.", string(incoming.Keys[i].Id))
 					continue
 				}
-				err := k.DeleteKey(incoming.Keys[i].Id)
+				_, err := k.DeleteKey(incoming.Keys[i].Id)
 				if err != nil {
 					return keyCount, err
 				}

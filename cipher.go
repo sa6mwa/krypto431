@@ -488,6 +488,9 @@ func (r *Krypto431) MarkKeyUsed(keyId []rune, used bool) error {
 // one where all recipients are keepers of this key. The message KeyId will be
 // used by diana.Trigraph during encryption/decryption.
 func (m *Message) EnrichWithKey() error {
+	if len(m.Id) == 0 {
+		m.Id = m.instance.NewUniqueMessageId()
+	}
 	if len(m.PlainText) == 0 {
 		return errors.New("message plain text is empty")
 	}
@@ -543,6 +546,9 @@ func (m *Message) EnrichWithKey() error {
 // encryption/decryption of the persistance file, while words encipher and
 // decipher are used for message ciphering in Krypto431.
 func (m *Message) Encipher() error {
+	if len(m.Id) == 0 {
+		m.Id = m.instance.NewUniqueMessageId()
+	}
 	err := m.EnrichWithKey()
 	if err != nil {
 		return fmt.Errorf("unable to enrich message with a key: %w", err)
@@ -661,6 +667,9 @@ func (m *Message) Encipher() error {
 // decoding is needed to support CipherText enciphered with multiple keys. If
 // deciphering succeeds, all keys used in the message will be marked `used`.
 func (m *Message) Decipher() error {
+	if len(m.Id) == 0 {
+		m.Id = m.instance.NewUniqueMessageId()
+	}
 	if len(m.KeyId) != m.instance.GroupSize {
 		return ErrNoKey
 	}
@@ -732,6 +741,9 @@ func (m *Message) Decipher() error {
 // Returns error if CipherText detection/decipher was unsuccessful, nil if
 // successful.
 func (m *Message) TryDecipherPlainText(dryrun ...bool) error {
+	if len(m.Id) == 0 {
+		m.Id = m.instance.NewUniqueMessageId()
+	}
 	if len(m.KeyId) > 0 {
 		return ErrNotCipherText
 	}
