@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/AlecAivazis/survey/v2"
 	"github.com/sa6mwa/krypto431"
 	"github.com/urfave/cli/v2"
 )
@@ -16,21 +15,6 @@ var (
 	ErrMissingImportFilename error = errors.New("filename to import keys from is missing")
 	ErrMissingExportFilename error = errors.New("filename to export keys to is missing")
 )
-
-var (
-	customMultilineQuestionTemplate string = `
-{{- if not .ShowAnswer}}
-{{- if .ShowHelp }}{{- color .Config.Icons.Help.Format }}{{ .Config.Icons.Help.Text }} {{ .Help }}{{color "reset"}}{{"\n"}}{{end}}
-{{- color .Config.Icons.Question.Format }}{{ .Config.Icons.Question.Text }} {{color "reset"}}
-{{- color "default+hb"}}{{ .Message }} {{color "reset"}}
-{{- if .Default}}{{color "white"}}({{.Default}}) {{color "reset"}}{{end}}
-{{- color "cyan"}}[Enter 2 empty lines to finish]{{color "reset"}}
-{{ end}}`
-)
-
-func init() {
-	survey.MultilineQuestionTemplate = customMultilineQuestionTemplate
-}
 
 func fatalf(format string, a ...any) {
 	format += LineBreak
@@ -381,10 +365,29 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 						Usage:   "Write print-out of messages to `filename`",
 					},
 					&cli.StringFlag{
-						Name:    oType,
+						Name:  oType,
+						Usage: "Output `type` of -o file (pdf or txt)",
+						Value: "pdf",
+					},
+					&cli.StringSliceFlag{
+						Name:    oTo,
 						Aliases: []string{"t"},
-						Usage:   "Output `type` of -o file (pdf or txt)",
-						Value:   "pdf",
+						Usage:   "Filter on recipients (addressees, `TO`)",
+					},
+					&cli.StringSliceFlag{
+						Name:    oFrom,
+						Aliases: []string{"f"},
+						Usage:   "Filter on sender (`DE`)",
+					},
+					&cli.BoolFlag{
+						Name:  oOr,
+						Usage: "Filter on any of the recipients given",
+						Value: false,
+					},
+					&cli.BoolFlag{
+						Name:  oAll,
+						Usage: "Select all messages (list/print/delete)",
+						Value: false,
 					},
 				},
 			},

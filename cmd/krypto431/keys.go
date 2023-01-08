@@ -51,7 +51,6 @@ func keys(c *cli.Context) error {
 			return false
 		}
 		if len(vettedKeepers) > 0 {
-			// List keys with keepers AND anonymous if --anonymous is given...
 			if o.or {
 				if !krypto431.AnyNeedleInHaystack(&vettedKeepers, &key.Keepers) {
 					return false
@@ -221,7 +220,7 @@ func keys(c *cli.Context) error {
 			return nil
 		}
 		fmt.Printf("FILE=%s"+LineBreak+"KEEPER=%s TOTALKEYS=%d MESSAGES=%d"+LineBreak,
-			k.GetPersistence(), string(k.GetCallSign()),
+			k.GetPersistence(), k.CallSignString(),
 			len(k.Keys), len(k.Messages))
 		// Print lines of keys...
 		fmt.Println(strings.TrimRightFunc(string(header), unicode.IsSpace))

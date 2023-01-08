@@ -49,6 +49,8 @@ type options struct {
 	new            string
 	newsalt        string
 	newpfk         string
+	to             []string
+	from           []string
 }
 
 const (
@@ -90,6 +92,8 @@ const (
 	oNew            string = "new"
 	oNewSalt        string = "new-salt"
 	oNewPFK         string = "new-pfk"
+	oTo             string = "to"
+	oFrom           string = "from"
 )
 
 // For simplicity, collect all values and return a populated options object.
@@ -134,6 +138,8 @@ func getOptions(c *cli.Context) options {
 		new:            c.String(oNew),
 		newsalt:        c.String(oNewSalt),
 		newpfk:         c.String(oNewPFK),
+		to:             c.StringSlice(oTo),
+		from:           c.StringSlice(oFrom),
 	}
 }
 

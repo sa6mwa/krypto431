@@ -5,6 +5,7 @@ go 1.19
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.6
 	github.com/nknorg/encrypted-stream v1.0.1
+	github.com/sa6mwa/blox v0.1.1
 	github.com/sa6mwa/dtg v0.1.0
 	github.com/seehuhn/mt19937 v1.0.0
 	github.com/stretchr/testify v1.8.1
@@ -27,6 +28,5 @@ require (
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	golang.org/x/sys v0.4.0 // indirect
 	golang.org/x/text v0.6.0 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

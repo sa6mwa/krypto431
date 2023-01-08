@@ -3,11 +3,23 @@ package krypto431
 import (
 	"errors"
 	"math"
+	"regexp"
 	"strings"
 	"unicode"
 )
 
 // Functions not assigned to methods of more general use likely end up here.
+
+func TrimRightRuneFunc(s []rune, f func(rune) bool) []rune {
+	for i := len(s); i > 0; i-- {
+		if f(s[i-1]) {
+			s = s[:i-1]
+		} else {
+			break
+		}
+	}
+	return s
+}
 
 // Configure go-password-validator minimum entropy for the entire krypto431
 // package. Entropy limit is not instance-scoped (yet).
@@ -82,7 +94,7 @@ func AnyNeedleInHaystack(needles *[][]rune, haystack *[][]rune) bool {
 	if needles == nil || haystack == nil {
 		return false
 	}
-	if len(*needles) == 0 || len(*haystack) == 0 {
+	if len(*needles) == 0 || len(*haystack) == 0 { // do not need len(*needles), but be explicit
 		return false
 	}
 	for i := range *needles {
@@ -90,6 +102,21 @@ func AnyNeedleInHaystack(needles *[][]rune, haystack *[][]rune) bool {
 			if EqualRunes(&(*haystack)[x], &(*needles)[i]) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func AnyOfThem(haystack *[][]rune, needle *[]rune) bool {
+	if haystack == nil || needle == nil {
+		return false
+	}
+	if len(*needle) == 0 {
+		return false
+	}
+	for i := range *haystack {
+		if EqualRunes(&(*haystack)[i], needle) {
+			return true
 		}
 	}
 	return false
@@ -132,6 +159,11 @@ func VettedKeepers(keepers ...string) (vettedKeepers [][]rune) {
 // VettedRecipients is an alias for VettedKeepers.
 func VettedRecipients(recipients ...string) [][]rune {
 	return VettedKeepers(recipients...)
+}
+
+// VettedCallSigns is an alias for VettedKeepers.
+func VettedCallSigns(callsigns ...string) [][]rune {
+	return VettedKeepers(callsigns...)
 }
 
 // VettedKeys is an alias for VettedKeepers.
@@ -320,4 +352,8 @@ func ByteCopy(src *[]byte) []byte {
 
 func BytePtr(s []byte) *[]byte {
 	return &s
+}
+
+func WithoutLineBreaks(text string) string {
+	return regexp.MustCompile(`\r?\n`).ReplaceAllString(text, " ")
 }

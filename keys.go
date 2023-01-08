@@ -11,6 +11,11 @@ import (
 	"github.com/sa6mwa/krypto431/crand"
 )
 
+func (k Key) GoString() string {
+	return fmt.Sprintf("Key{Id:%s Runes:\"%s\" Keepers:[%s] Created:%s Expires:%s Used:%t Compromised:%t Comment:\"%s\" instance:%p}",
+		k.IdString(), string(k.Runes), k.JoinKeepers(","), k.Created, k.Expires, k.Used, k.Compromised, k.CommentString(), k.instance)
+}
+
 // ContainsKeyId checks if the Krypto431.Keys slice already contains Id and
 // return true if it does, false if it does not.
 func (k *Krypto431) ContainsKeyId(keyId *[]rune) bool {
@@ -72,7 +77,8 @@ func (k *Krypto431) NewKey(expire time.Time, keepers ...string) *Key {
 	return &key
 }
 
-// DeleteKey removes one or more keys from the instance's Key slice.
+// DeleteKey removes one or more keys from the instance's Key slice. Function
+// wipes the key before deleting it.
 func (k *Krypto431) DeleteKey(keyIds ...[]rune) error {
 	if len(keyIds) == 0 {
 		return nil
@@ -232,6 +238,15 @@ func (k *Key) UsedString(rightSpacing ...int) string {
 	return Words["No"]
 }
 
+// Returns string used if key is marked used or string notUsed if not marked
+// used.
+func (k *Key) UsedOrNotString(used string, notUsed string) string {
+	if k.Used {
+		return used
+	}
+	return notUsed
+}
+
 // Returns Yes if key is marked compromised, No if not.
 func (k *Key) CompromisedString() string {
 	if k.Compromised {
@@ -242,6 +257,10 @@ func (k *Key) CompromisedString() string {
 
 func (k *Key) IdString() string {
 	return string(k.Id)
+}
+
+func (k *Key) CommentString() string {
+	return string(k.Comment)
 }
 
 // continue here TODO

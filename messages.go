@@ -8,9 +8,11 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/sa6mwa/blox"
 	"github.com/sa6mwa/dtg"
 )
 
@@ -20,8 +22,9 @@ var (
 )
 
 var (
-	HelpTextRadiogram string = `Message header as well as text body is entered as a radiogram in the old Swedish
-Armed Forces radiotelegraph message format (simplified ACP 124). Examples:
+	NilRunes          []rune = "NIL"
+	HelpTextRadiogram string = `Message header as well as text body is entered as a radiogram according to the
+following simplified ACP 124 radiotelegraph message format:
 TO1 TO2 TO3 DE FROM 012345 = Hello, this is the body of the message = K
 DE FROM This is the shortest form.
 TO DE FROM 012345ZDEC22 COL 3 = ABCDE FGHIJ KLMNO = K
@@ -79,6 +82,22 @@ DE FROM 012345 4 = ABCDE FGHIJ KLMNO QRSTU = K
 	//  MessageTrailRegexp.ReplaceAllString(messageText, "")
 	MessageTrailRegexp *regexp.Regexp = regexp.MustCompile(`(?i)(\s*=\s*[K+]|\s[K+]|\s*\[AR\]|\s*=\s*AR)\s*$`)
 )
+
+var (
+	CustomMultilineQuestionTemplate string = `
+{{- if not .ShowAnswer}}
+{{- if .ShowHelp }}{{- color .Config.Icons.Help.Format }}{{ .Config.Icons.Help.Text }} {{ .Help }}{{color "reset"}}{{"\n"}}{{end}}
+{{- color .Config.Icons.Question.Format }}{{ .Config.Icons.Question.Text }} {{color "reset"}}
+{{- color "default+hb"}}{{ .Message }} {{color "reset"}}
+{{- if .Default}}{{color "white"}}({{.Default}}) {{color "reset"}}{{end}}
+{{- color "cyan"}}[Enter 2 empty lines to finish]{{color "reset"}}
+{{ end}}`
+)
+
+func (m Message) GoString() string {
+	return fmt.Sprintf("Message{Recipients:[%s] From:%s DTG:%s KeyId:%s PlainText:\"%s\" Binary:%q CipherText:\"%s\" Radiogram:\"%s\" instance:%p}",
+		m.JoinRecipients(","), string(m.From), m.DTG, string(m.KeyId), string(m.PlainText), m.Binary, string(m.CipherText), string(m.Radiogram), m.instance)
+}
 
 // NewTextMessage creates a new message from a radiogram (Swedish Armed Forces telegraphy
 // radiogram which can be thought of as simplified ACP 124). First argument is the
@@ -145,6 +164,7 @@ func (k *Krypto431) NewTextMessage(msg ...string) (*Message, error) {
 func (k *Krypto431) PromptNewTextMessage() (*Message, error) {
 	fmt.Print(HelpTextRadiogram)
 	var radiogram string
+	survey.MultilineQuestionTemplate = CustomMultilineQuestionTemplate
 	prompt := &survey.Multiline{
 		Message: fmt.Sprintf("Enter message as radiogram (your call is %s)", k.CallSignString()),
 	}
@@ -187,22 +207,18 @@ func (k *Krypto431) ParseRadiogram(radiogram string) (*Message, error) {
 	regexps := []*regexp.Regexp{MessageRegexpFull, MessageRegexpSemi, MessageRegexpShort, MessageRegexpMini}
 	for _, r := range regexps {
 		matches = r.FindAllStringSubmatch(radiogram, 1)
-		/* 		if len(matches) > 0 {
-		   			for _, match := range matches[0] {
-		   				fmt.Fprintf(os.Stderr, "\"%s\""+LineBreak, match)
-		   			}
-		   		}
-		*/
+		// if len(matches) > 0 {
+		// 	for _, match := range matches[0] {
+		// 		fmt.Fprintf(os.Stderr, "\"%s\""+LineBreak, match)
+		// 	}
+		// }
 		if len(matches) == 1 && len(matches[0]) == 5 {
 			// 1=Recipients, 2=From, 3=DTG, 4=Text
 			m.Recipients = VettedRecipients(matches[0][1])
 			m.From = []rune(strings.ToUpper(strings.TrimSpace(matches[0][2])))
-			if !EqualRunes(&m.From, &k.CallSign) {
-				fmt.Fprintf(os.Stderr, "%s!=%s"+LineBreak, string(m.From), string(k.CallSign))
-			}
 			dtgString := strings.ToUpper(strings.TrimSpace(matches[0][3]))
 			if utf8.RuneCountInString(dtgString) == 0 {
-				fmt.Fprintln(os.Stderr, "using time.Now() as message time")
+				//fmt.Fprintln(os.Stderr, "using time.Now() as message time")
 				m.DTG.Time = time.Now()
 			} else {
 				var err error
@@ -212,6 +228,10 @@ func (k *Krypto431) ParseRadiogram(radiogram string) (*Message, error) {
 				}
 			}
 			m.PlainText = []rune(strings.TrimSpace(MessageTrailRegexp.ReplaceAllString(matches[0][4], "")))
+			m.PlainText = TrimRightRuneFunc(m.PlainText, func(r rune) bool {
+				return unicode.IsSpace(r) || r == '+' || r == '='
+			})
+			m.Radiogram = []rune(radiogram)
 			return m, nil
 		}
 	}
@@ -251,6 +271,67 @@ func (m *Message) SetInstance(instance *Krypto431) {
 // false if not.
 func (m *Message) IsMyCall() bool {
 	return EqualRunesFold(&m.From, &m.instance.CallSign)
+}
+
+func (m *Message) QRZ() []rune {
+	return m.instance.CallSign
+}
+
+func (m *Message) QRZString() string {
+	return string(m.instance.CallSign)
+}
+
+func (k *Krypto431) SummaryOfMessages(filterFunction func(msg *Message) bool) (header []rune, lines [][]rune) {
+	var mp []*Message
+	for i := range k.Messages {
+		if filterFunction(&k.Messages[i]) {
+			err := k.Messages[i].TryDecipherPlainText(true)
+			if err == nil {
+				k.Messages[i].TryDecipherPlainText(false)
+			}
+			mp = append(mp, &k.Messages[i])
+		}
+	}
+
+	predictedColumnSizes := predictColumnSizesOfMessages(mp)
+
+	columnHeader := []string{"DTG", "TO", "DE", "DIGEST"}
+	// Guard rail...
+	if len(predictedColumnSizes) != len(columnHeader) {
+		panic("wrong number of columns")
+	}
+	addSpace := 1
+	for i := range predictedColumnSizes {
+		if len(columnHeader) <= i {
+			continue
+		}
+		// Add column header and padding.
+		header = append(header, []rune(columnHeader[i])...)
+		if i < len(predictedColumnSizes)-1 {
+			padding := predictedColumnSizes[i] - len(columnHeader[i]) + addSpace
+			for x := 0; x < padding; x++ {
+				header = append(header, rune(' '))
+			}
+		}
+	}
+	// Populate lines rune slice with messages
+	for i := range mp {
+		var columns [][]rune
+		columns = append(columns, withPadding([]rune(mp[i].DTG.String()), predictedColumnSizes[0]+addSpace))
+		if len(mp[i].Recipients) > 0 {
+			columns = append(columns, withPadding([]rune(mp[i].JoinRecipients(",")), predictedColumnSizes[1]+addSpace))
+		} else {
+			columns = append(columns, withPadding(NilRunes, predictedColumnSizes[1]+addSpace))
+		}
+		if len(mp[i].From) > 0 {
+			columns = append(columns, withPadding(mp[i].From, predictedColumnSizes[2]+addSpace))
+		} else {
+			columns = append(columns, withPadding(NilRunes, predictedColumnSizes[2]+addSpace))
+		}
+		digest := blox.CutLineShort(WithoutLineBreaks(string(mp[i].PlainText)+string(mp[i].CipherText)), 35, true)
+		columns = append(columns, []rune(digest))
+	}
+
 }
 
 // TODO: Implement! :)

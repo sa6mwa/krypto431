@@ -143,7 +143,6 @@ type Message struct {
 	Recipients [][]rune
 	From       []rune
 	DTG        dtg.DTG
-	GroupCount int
 	KeyId      []rune
 	PlainText  []rune
 	Binary     []byte
@@ -330,77 +329,62 @@ func (k *Key) ZeroWipe() error {
 
 // Wipe overwrites key, plaintext and ciphertext with random runes or zeroes.
 // The order is highest priority first (plaintext), then ciphertext and finally
-// the groupcount and keyid. Nilling the rune slices should promote it for
-// garbage collection.
-func (t *Message) Wipe() {
+// the keyid. Nilling the rune slices should promote it for garbage collection.
+func (m *Message) Wipe() {
 	if useCrandWipe {
-		t.RandomWipe()
+		m.RandomWipe()
 	} else {
-		t.ZeroWipe()
+		m.ZeroWipe()
 	}
 }
 
-// RandomWipe assigned method for Text wipes PlainText, CipherText, GroupCount
+// RandomWipe assigned method for Text wipes PlainText, CipherText
 // and KeyId fields.
-func (t *Message) RandomWipe() {
+func (m *Message) RandomWipe() {
 	// wipe PlainText
-	written, err := crand.ReadRunes(t.PlainText)
-	if err != nil || written != len(t.PlainText) {
-		for i := 0; i < len(t.PlainText); i++ {
-			t.PlainText[i] = 0
+	written, err := crand.ReadRunes(m.PlainText)
+	if err != nil || written != len(m.PlainText) {
+		for i := 0; i < len(m.PlainText); i++ {
+			m.PlainText[i] = 0
 		}
 	}
-	t.PlainText = nil
+	m.PlainText = nil
 	// wipe CipherText
-	written, err = crand.ReadRunes(t.CipherText)
-	if err != nil || written != len(t.CipherText) {
-		for i := 0; i < len(t.CipherText); i++ {
-			t.CipherText[i] = 0
+	written, err = crand.ReadRunes(m.CipherText)
+	if err != nil || written != len(m.CipherText) {
+		for i := 0; i < len(m.CipherText); i++ {
+			m.CipherText[i] = 0
 		}
 	}
-	t.CipherText = nil
-	// wipe GroupCount
-	t.GroupCount = crand.Int()
+	m.CipherText = nil
 	// wipe KeyId
-	written, err = crand.ReadRunes(t.KeyId)
-	if err != nil || written != len(t.KeyId) {
-		for i := 0; i < len(t.KeyId); i++ {
-			t.KeyId[i] = 0
+	written, err = crand.ReadRunes(m.KeyId)
+	if err != nil || written != len(m.KeyId) {
+		for i := 0; i < len(m.KeyId); i++ {
+			m.KeyId[i] = 0
 		}
 	}
-	t.KeyId = nil
-	/* 	// wipe Chunks
-	   	for x := range t.EncodedChunks {
-	   		t.EncodedChunks[x].RandomWipe()
-	   	}
-	*/
+	m.KeyId = nil
 }
 
 // ZeroWipe assigned method for PlainText writes zeroes to Text and EncodedText
 // fields.
-func (t *Message) ZeroWipe() {
+func (m *Message) ZeroWipe() {
 	// wipe PlainText
-	for i := 0; i < len(t.PlainText); i++ {
-		t.PlainText[i] = 0
+	for i := 0; i < len(m.PlainText); i++ {
+		m.PlainText[i] = 0
 	}
-	t.PlainText = nil
+	m.PlainText = nil
 	// wipe CipherText
-	for i := 0; i < len(t.CipherText); i++ {
-		t.CipherText[i] = 0
+	for i := 0; i < len(m.CipherText); i++ {
+		m.CipherText[i] = 0
 	}
-	t.CipherText = nil
-	// wipe GroupCount
-	t.GroupCount = 0
+	m.CipherText = nil
 	// wipe KeyId
-	for i := 0; i < len(t.KeyId); i++ {
-		t.KeyId[i] = 0
+	for i := 0; i < len(m.KeyId); i++ {
+		m.KeyId[i] = 0
 	}
-	t.KeyId = nil
-	/* 	// wipe Chunks
-	   	for x := range t.EncodedChunks {
-	   		t.EncodedChunks[x].ZeroWipe()
-	   	}
-	*/
+	m.KeyId = nil
 }
 
 // Wipe overwrites a chunk with either random runes or zeroes.
