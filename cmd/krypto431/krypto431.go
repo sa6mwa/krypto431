@@ -14,6 +14,7 @@ var (
 	ErrAssertion             error = errors.New("assertion error")
 	ErrMissingImportFilename error = errors.New("filename to import keys from is missing")
 	ErrMissingExportFilename error = errors.New("filename to export keys to is missing")
+	ErrMissingOutputFilename error = errors.New("missing or empty output filename")
 )
 
 func fatalf(format string, a ...any) {
@@ -285,7 +286,7 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 						Value: false,
 					},
 					&cli.StringSliceFlag{
-						Name:    oKeys,
+						Name:    oId,
 						Aliases: []string{"i"},
 						Usage:   "Select specific key `ID`s (list/edit/import/export/delete)",
 					},
@@ -378,6 +379,11 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 						Name:    oFrom,
 						Aliases: []string{"f"},
 						Usage:   "Filter on sender (`DE`)",
+					},
+					&cli.StringSliceFlag{
+						Name:    oId,
+						Aliases: []string{"i"},
+						Usage:   "Select specific message `ID`s (message IDs are case-sensitive)",
 					},
 					&cli.BoolFlag{
 						Name:  oOr,

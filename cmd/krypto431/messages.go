@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/sa6mwa/krypto431"
@@ -117,9 +118,19 @@ func messages(c *cli.Context) error {
 	}
 
 	// new message
+	if c.IsSet(oNew) && o.newBool {
+		msg, err := k.PromptNewTextMessage()
+		if err != nil {
+			return err
+		}
+		err = k.Save()
+		if err != nil {
+			return err
+		}
+		eprintf("Saved message %s in %s."+LineBreak, msg.IdString(), k.GetPersistence())
+	}
 
 	// list messages
-
 	if c.IsSet(oList) && o.listItems {
 		// First, ensure there are messages in this instance.
 		messages := len(k.Messages)
@@ -144,6 +155,28 @@ func messages(c *cli.Context) error {
 			fmt.Println(strings.TrimRightFunc(string(lines[i]), unicode.IsSpace))
 		}
 	}
+
+	// output message(s)
+	if c.IsSet(oOutput) {
+		if utf8.RuneCountInString(o.output) == 0 {
+			return ErrMissingOutputFilename
+		}
+		switch o.outputType {
+		case "pdf", "PDF":
+			err := k.MessagesPDF(filterFunction, o.output)
+			if err != nil {
+				return err
+			}
+		case "txt", "text", "TXT":
+			err := k.MessagesTextFile(filterFunction, o.output)
+			if err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("un-supported output-type \"%s\"", o.outputType)
+		}
+	}
+
 	return nil
 }
 

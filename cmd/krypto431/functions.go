@@ -20,6 +20,7 @@ type options struct {
 	keys           int
 	keySlice       []string
 	newInt         int
+	newBool        bool
 	keepers        []string
 	keyLength      int
 	groupSize      int
@@ -111,6 +112,7 @@ func getOptions(c *cli.Context) options {
 		keys:           c.Int(oKeys),
 		keySlice:       c.StringSlice(oKeys),
 		newInt:         c.Int(oNew),
+		newBool:        c.Bool(oNew),
 		keepers:        c.StringSlice(oKeepers),
 		keyLength:      c.Int(oKeyLength),
 		groupSize:      c.Int(oGroupSize),

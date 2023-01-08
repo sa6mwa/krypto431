@@ -275,10 +275,10 @@ func (k *Key) CommentString() string {
 //	sort.Slice(dateSlice, func(i, j int) bool {
 //			return dateSlice[i].sortByThis.Before(dateSlice[j].sortByThis)
 //		})
-func (k *Krypto431) SummaryOfKeys(filterFunction func(key *Key) bool) (header []rune, lines [][]rune) {
+func (k *Krypto431) SummaryOfKeys(filter func(key *Key) bool) (header []rune, lines [][]rune) {
 	var kp []*Key
 	for i := range k.Keys {
-		if filterFunction(&k.Keys[i]) {
+		if filter(&k.Keys[i]) {
 			kp = append(kp, &k.Keys[i])
 		}
 	}

@@ -164,19 +164,23 @@ func (k *Krypto431) NewTextMessage(msg ...string) (*Message, error) {
 }
 
 // PromptNewTextMessage prompts the user to enter a a new text message as a
-// radiogram. Returns a pointer to the new message or error on failure.
+// radiogram. If os.Stdin is not a terminal, radiogram is read from stdin
+// without prompt. Returns a pointer to the new message or error on failure.
 func (k *Krypto431) PromptNewTextMessage() (*Message, error) {
-	fmt.Print(HelpTextRadiogram)
-	var radiogram string
-	survey.MultilineQuestionTemplate = CustomMultilineQuestionTemplate
-	prompt := &survey.Multiline{
-		Message: fmt.Sprintf("Enter message as radiogram (your call is %s)", k.CallSignString()),
+	if IsTerminal() {
+		fmt.Print(HelpTextRadiogram)
+		var radiogram string
+		survey.MultilineQuestionTemplate = CustomMultilineQuestionTemplate
+		prompt := &survey.Multiline{
+			Message: fmt.Sprintf("Enter message as radiogram (your call is %s)", k.CallSignString()),
+		}
+		err := survey.AskOne(prompt, &radiogram)
+		if err != nil {
+			return nil, err
+		}
+		return k.NewTextMessage(radiogram)
 	}
-	err := survey.AskOne(prompt, &radiogram)
-	if err != nil {
-		return nil, err
-	}
-	return k.NewTextMessage(radiogram)
+	return k.NewTextMessageFromReader(os.Stdin)
 }
 
 // NewTextMessageFromReader is similar to PromptNewTextMessage except radiogram
@@ -351,7 +355,9 @@ func (k *Krypto431) DeleteMessagesBySummaryString(summaryStrings ...string) (int
 	return deleted, nil
 }
 
-
+func (m *Message) IdString() string {
+	return string(m.Id)
+}
 
 // Groups for messages return a rune slice where each group (GroupSize) is
 // separated by space. Don't forget to Wipe() this slice when you are done!
@@ -396,10 +402,10 @@ func (m *Message) QRZString() string {
 	return string(m.instance.CallSign)
 }
 
-func (k *Krypto431) SummaryOfMessages(filterFunction func(msg *Message) bool) (header []rune, lines [][]rune) {
+func (k *Krypto431) SummaryOfMessages(filter func(msg *Message) bool) (header []rune, lines [][]rune) {
 	var mp []*Message
 	for i := range k.Messages {
-		if filterFunction(&k.Messages[i]) {
+		if filter(&k.Messages[i]) {
 			err := k.Messages[i].TryDecipherPlainText(true)
 			if err == nil {
 				k.Messages[i].TryDecipherPlainText(false)

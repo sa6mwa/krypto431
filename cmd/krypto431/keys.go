@@ -228,5 +228,26 @@ func keys(c *cli.Context) error {
 			fmt.Println(strings.TrimRightFunc(string(lines[i]), unicode.IsSpace))
 		}
 	}
+
+	// output key(s)
+	if c.IsSet(oOutput) {
+		if utf8.RuneCountInString(o.output) == 0 {
+			return ErrMissingOutputFilename
+		}
+		switch o.outputType {
+		case "pdf", "PDF":
+			err := k.KeysPDF(filterFunction, o.output)
+			if err != nil {
+				return err
+			}
+		case "txt", "text", "TXT":
+			err := k.KeysTextFile(filterFunction, o.output)
+			if err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("un-supported output-type \"%s\"", o.outputType)
+		}
+	}
 	return nil
 }

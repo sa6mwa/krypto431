@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.6
+	github.com/jung-kurt/gofpdf v1.16.2
 	github.com/nknorg/encrypted-stream v1.0.1
 	github.com/sa6mwa/blox v0.1.1
 	github.com/sa6mwa/dtg v0.1.0
