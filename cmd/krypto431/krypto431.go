@@ -219,9 +219,10 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 				},
 			},
 			{
-				Name:   "keys",
-				Usage:  "List, generate, transport, delete or print key(s)",
-				Action: keys,
+				Name:    "keys",
+				Aliases: []string{"k"},
+				Usage:   "List, generate, transport, delete or print key(s)",
+				Action:  keys,
 				Flags: []cli.Flag{
 					&cli.BoolFlag{
 						Name:    oList,
@@ -267,12 +268,12 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 					&cli.StringFlag{
 						Name:    oOutput,
 						Aliases: []string{"o"},
-						Usage:   "Write print-out of keys to `filename`",
+						Usage:   "Write formatted keys to `filename` (pdf/txt by extension)",
 					},
 					&cli.StringFlag{
 						Name:    oType,
 						Aliases: []string{"t"},
-						Usage:   "Output `format` of -o file (pdf or txt)",
+						Usage:   "Override output `type` of -o file (pdf or txt)",
 						Value:   "pdf",
 					},
 					&cli.StringSliceFlag{
@@ -338,7 +339,7 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 			},
 			{
 				Name:    "messages",
-				Aliases: []string{"msg"},
+				Aliases: []string{"m", "msg"},
 				Usage:   "List, write, receive, delete or print message(s)",
 				Action:  messages,
 				Flags: []cli.Flag{
@@ -363,11 +364,11 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 					&cli.StringFlag{
 						Name:    oOutput,
 						Aliases: []string{"o"},
-						Usage:   "Write print-out of messages to `filename`",
+						Usage:   "Write formatted messages to `filename` (pdf/txt by extension)",
 					},
 					&cli.StringFlag{
 						Name:  oType,
-						Usage: "Output `type` of -o file (pdf or txt)",
+						Usage: "Override output `type` of -o file (pdf or txt)",
 						Value: "pdf",
 					},
 					&cli.StringSliceFlag{
@@ -395,19 +396,11 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 						Usage: "Select all messages (list/print/delete)",
 						Value: false,
 					},
-				},
-			},
-			{
-				Name:    "dev",
-				Aliases: []string{"test"},
-				Usage:   "Development code",
-				Action:  dev,
-				Flags: []cli.Flag{
 					&cli.BoolFlag{
-						Name:    oSave,
-						Aliases: []string{"s"},
+						Name:    oYes,
+						Aliases: []string{"y"},
+						Usage:   "Force option, answer yes and/or do not prompt except of PFK",
 						Value:   false,
-						Usage:   "Save changes to persistence file",
 					},
 				},
 			},

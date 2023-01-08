@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -12,7 +13,7 @@ import (
 )
 
 func messages(c *cli.Context) error {
-	atLeastOneOfThem := []string{oList, oNew, oDelete}
+	atLeastOneOfThem := []string{oList, oNew, oDelete, oOutput}
 	opCount := 0
 	for _, op := range atLeastOneOfThem {
 		if c.IsSet(op) {
@@ -40,6 +41,14 @@ func messages(c *cli.Context) error {
 	filterFunction := func(msg *krypto431.Message) bool {
 		if o.all {
 			return true
+		}
+		if len(vettedMessageIds) > 0 {
+			for x := range vettedMessageIds {
+				if krypto431.EqualRunes(&msg.Id, &vettedMessageIds[x]) {
+					return true
+				}
+			}
+			return false
 		}
 		if len(vettedAddressees) > 0 {
 			if o.or {
@@ -144,7 +153,7 @@ func messages(c *cli.Context) error {
 			if messages > 1 {
 				plural = "s"
 			}
-			eprintf("No message out of %d message"+plural+"in %s matched criteria."+LineBreak, messages, k.GetPersistence())
+			eprintf("No message out of %d message"+plural+" in %s matched criteria."+LineBreak, messages, k.GetPersistence())
 			return nil
 		}
 		fmt.Printf("FILE=%s"+LineBreak+"KEEPER=%s TOTALKEYS=%d MESSAGES=%d"+LineBreak,
@@ -161,7 +170,16 @@ func messages(c *cli.Context) error {
 		if utf8.RuneCountInString(o.output) == 0 {
 			return ErrMissingOutputFilename
 		}
-		switch o.outputType {
+		outputType := o.outputType
+		if !c.IsSet(oType) {
+			switch filepath.Ext(o.output) {
+			case ".pdf", ".PDF":
+				outputType = "pdf"
+			case ".txt", ".TXT":
+				outputType = "txt"
+			}
+		}
+		switch outputType {
 		case "pdf", "PDF":
 			err := k.MessagesPDF(filterFunction, o.output)
 			if err != nil {

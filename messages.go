@@ -208,6 +208,7 @@ func (k *Krypto431) NewTextMessageFromReader(r io.Reader) (*Message, error) {
 // PlainText which will result in a populated KeyId and CipherText field as well
 // as the actual (deciphered) PlainText.
 func (k *Krypto431) ParseRadiogram(radiogram string) (*Message, error) {
+	radiogram = blox.ReplaceLineBreaks(radiogram, " ")
 	m := &Message{
 		instance: k,
 		Id:       k.NewUniqueMessageId(),

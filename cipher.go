@@ -644,19 +644,18 @@ func (m *Message) Encipher() error {
 		}
 	}
 	// DEBUG: remove print-outs below...
-	for i := range chunks {
-		grouped, err := groups(&chunks[i].encodedText, m.instance.GroupSize, 0)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("key: %s, enctxt: %s"+LineBreak, string(chunks[i].key.Id), string(*grouped))
-	}
-	grouped, err := groups(&m.CipherText, m.instance.GroupSize, 0)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("        ciphertext: %s"+LineBreak, string(*grouped))
-
+	// for i := range chunks {
+	// 	grouped, err := groups(&chunks[i].encodedText, m.instance.GroupSize, 0)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	fmt.Printf("key: %s, enctxt: %s"+LineBreak, string(chunks[i].key.Id), string(*grouped))
+	// }
+	// grouped, err := groups(&m.CipherText, m.instance.GroupSize, 0)
+	// if err != nil {
+	// 	return err
+	// }
+	// fmt.Printf("        ciphertext: %s"+LineBreak, string(*grouped))
 	releaseKeys = false
 	return nil
 }

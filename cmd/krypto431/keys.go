@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode"
@@ -13,7 +14,7 @@ import (
 )
 
 func keys(c *cli.Context) error {
-	atLeastOneOfThem := []string{oList, oEdit, oNew, oDelete, oImport, oExport}
+	atLeastOneOfThem := []string{oList, oEdit, oNew, oDelete, oImport, oExport, oOutput}
 	opCount := 0
 	for _, op := range atLeastOneOfThem {
 		if c.IsSet(op) {
@@ -234,7 +235,16 @@ func keys(c *cli.Context) error {
 		if utf8.RuneCountInString(o.output) == 0 {
 			return ErrMissingOutputFilename
 		}
-		switch o.outputType {
+		outputType := o.outputType
+		if !c.IsSet(oType) {
+			switch filepath.Ext(o.output) {
+			case ".pdf", ".PDF":
+				outputType = "pdf"
+			case ".txt", ".TXT":
+				outputType = "txt"
+			}
+		}
+		switch outputType {
 		case "pdf", "PDF":
 			err := k.KeysPDF(filterFunction, o.output)
 			if err != nil {

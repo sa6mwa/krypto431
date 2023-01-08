@@ -88,7 +88,7 @@ func initialize(c *cli.Context) error {
 			{
 				Name: "keylength",
 				Prompt: &survey.Input{
-					Message: "Choose length of key:",
+					Message: "Choose length of keys:",
 					Help:    fmt.Sprintf("Default key length of %d is recommended", krypto431.DefaultKeyLength),
 					Default: fmt.Sprintf("%d", o.keyLength),
 				},
