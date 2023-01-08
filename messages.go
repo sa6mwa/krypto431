@@ -451,7 +451,7 @@ func (k *Krypto431) SummaryOfMessages(filter func(msg *Message) bool) (header []
 		} else {
 			columns = append(columns, withPadding(NilRunes, predictedColumnSizes[3]+addSpace))
 		}
-		digest := blox.CutLineShort(WithoutLineBreaks(string(mp[i].PlainText)+string(mp[i].CipherText)), 35, true)
+		digest := blox.CutLineShort(blox.WithoutLineBreaks(string(mp[i].PlainText)+string(mp[i].CipherText)), 35, true)
 		columns = append(columns, []rune(digest))
 		var totalLineLength int
 		for x := range columns {

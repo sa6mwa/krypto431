@@ -4,7 +4,6 @@ import (
 	"errors"
 	"math"
 	"os"
-	"regexp"
 	"strings"
 	"unicode"
 
@@ -439,8 +438,4 @@ func ByteCopy(src *[]byte) []byte {
 
 func BytePtr(s []byte) *[]byte {
 	return &s
-}
-
-func WithoutLineBreaks(text string) string {
-	return regexp.MustCompile(`\r?\n`).ReplaceAllString(text, " ")
 }

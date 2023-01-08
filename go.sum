@@ -39,8 +39,8 @@ github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZN
 github.com/russross/blackfriday/v2 v2.1.0 h1:JIOH55/0cWyOuilr9/qlrm0BSXldqnqwMsf35Ld67mk=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/ruudk/golang-pdf417 v0.0.0-20181029194003-1af4ab5afa58/go.mod h1:6lfFZQK844Gfx8o5WFuvpxWRwnSoipWe/p622j1v06w=
-github.com/sa6mwa/blox v0.1.1 h1:0Apz3/NCyQntDvypZEpB7JgcBkPLxHCikp0B4/IGXiY=
-github.com/sa6mwa/blox v0.1.1/go.mod h1:F+L9vwG1nx1T94V5yzSTj1XctE4kEfdGg+LqQSoF1eE=
+github.com/sa6mwa/blox v0.1.2 h1:EerM5pYbzLlhdyRCvXyODafUAW5EtE73PfhUE3ERmls=
+github.com/sa6mwa/blox v0.1.2/go.mod h1:F+L9vwG1nx1T94V5yzSTj1XctE4kEfdGg+LqQSoF1eE=
 github.com/sa6mwa/dtg v0.1.0 h1:AZ8wVdyG14Er+EOumZ4UPYWt98bnNT1DUCCXRB7Hdhk=
 github.com/sa6mwa/dtg v0.1.0/go.mod h1:cEVIVcZBaAXfw9Q8kPvzzYWtjVmFRmKHiUii5ad+AUc=
 github.com/seehuhn/mt19937 v1.0.0 h1:r02DuVkQXfohssWZO8L/TeAlYOah7aNNubEHB/7Vtfs=

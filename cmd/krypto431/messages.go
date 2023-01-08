@@ -176,28 +176,5 @@ func messages(c *cli.Context) error {
 			return fmt.Errorf("un-supported output-type \"%s\"", o.outputType)
 		}
 	}
-
-	return nil
-}
-
-func tranceiveMessage(c *cli.Context) error {
-	o := getOptions(c)
-	k := krypto431.New(krypto431.WithPersistence(o.persistence), krypto431.WithInteractive(true))
-	defer k.Wipe()
-	err := setSaltAndPFK(c, &k)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func receiveMessage(c *cli.Context) error {
-	o := getOptions(c)
-	k := krypto431.New(krypto431.WithPersistence(o.persistence), krypto431.WithInteractive(true))
-	defer k.Wipe()
-	err := setSaltAndPFK(c, &k)
-	if err != nil {
-		return err
-	}
 	return nil
 }
