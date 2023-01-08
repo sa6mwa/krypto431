@@ -1,12 +1,86 @@
 # Krypto431
 
-This is a simple OTP (One Time Pad) crypto system called Krypto431. 431 is the
-sum of all ascii characters in my amateur radio callsign SA6MWA. As the name
-suggests, the concept is to add or subtract in order to encrypt or decrypt a
-text message. The system is designed to be easy to use without any electronic
-equipment, just pen and paper.
+This is a simple OTP (One Time Pad) crypto system called Krypto431 based on the
+DIANA cryptosystem utilizing a reciprocal table. Krypto431 is both a CLI
+(command-line interface) tool and a traditional pen-and-paper cipher. The tool
+is provided for Linux, BSD-derivatives and Windows.
 
-## Why?
+## Status
+
+Current version (v0.1.x) is a **proof-of-concept** and a pre-release to
+demonstrate the idea. Version 0.2 will include (aside from bug-fixes) printable
+instructions how to encipher, decipher, distribute keys, generating a key with
+dice. Support for binary file transfer will be included in v0.3.
+
+## Examples
+
+Read ahead how to encipher/decipher by hand and further information. Crude
+examples of current version...
+
+```
+$ ./krypto431 messages -n
+Enter decryption key: 
+Message header as well as text body is entered as a radiogram according to the
+following simplified ACP 124 radiotelegraph message format:
+TO1 TO2 TO3 DE FROM 012345 = Hello, this is the body of the message = K
+DE FROM This is the shortest form.
+TO DE FROM 012345ZDEC22 COL 3 = ABCDE FGHIJ KLMNO = K
+TO DE FROM 012345 == TO2 TO3 == COL 2 = Hello world K
+TO DE FROM 012345 C = This is a broadcast message. +
+DE FROM 012345 4 = ABCDE FGHIJ KLMNO QRSTU = K
+*) TO is(/are) the call-sign(s) of the recipient(s).
+   FROM is your call-sign.
+   012345 is a Date-Time Group (day hour minute, full format DDHHMMZmmmYY).
+? Enter message as radiogram (your call is SA6MWA) [Enter 2 empty lines to finish]
+qj de sa6mwa Hello world, this is a short message. = K
+________________________________________________________________________________
+082223AJAN23             TO: QJ
+ID: C7X9          FROM (DE): SA6MWA
+=TEXT=
+Hello world, this is a short message.
+=CIPHER=
+PHPSN DLAUC VESIM SEIYG NBOBP CIAMS JHZIA BGBGG CIYAU CKMNM
+=TRAFFIC=EXAMPLE=
+QJ DE SA6MWA 082223AJAN23 10 = PHPSN DLAUC VESIM SEIYG NBOBP CIAMS JHZIA BGBGG
+CIYAU CKMNM = K
+
+Saved message C7X9 in /home/sa6mwa/.krypto431.gob.
+
+
+$ krypto431 keys -k qj -o keysToGiveToQJ.pdf
+...
+
+$ ./krypto431 keys -k qj -E keysToQJ.gob
+Enter decryption key: 
+Exported 10 keys from /home/sa6mwa/.krypto431.gob to keysToQJ.gob (change PFK/salt with the pfk command).
+```
+
+### Initialization
+
+Krypto431 uses (per default) an encrypted GOB (Go Binary) file under your home
+folder named `.krypto431.gob`. See `krypto431 -h` and `krypto431 pdf -h` for
+full information on how to manage these key and message stores.
+
+```console
+# For help: krypto431 init -h
+
+$ krypto431 init
+? Enter your call-sign: sa6mwa
+? Enter number of initial keys to generate: 10
+? Enter keepers of the initial keys (leave empty for anonymous): qj
+? Enter expiry date as a Date-Time Group or empty for default: 101500ZFEB23
+? Choose length of keys: 350
+? Choose group size: 5
+? Overwrite /home/sa6mwa/.krypto431.gob? Yes
+Enter encryption key: 
+Denied: insecure password, try including more special characters or using a longer password (42<60)
+Enter encryption key: 
+OK: Password entropy is 97
+Enter encryption key: (repeat) 
+Saved /home/sa6mwa/.krypto431.gob
+```
+
+## Case
 
 One may think One-Time-Pad (OTP) ciphers are pretty simple and straight
 forward, but in order to be able to communicate, encrypt and decrypt messages
@@ -18,6 +92,11 @@ solutions readily available (that I know of). Krypto431 was realized to provide
 a standard and a set of tools for effectively passing encrypted messages that
 can - if necessary - be deciphered (and enciphered) without an electronic or a
 mechanical device.
+
+431 is the sum of all ascii characters in my amateur radio callsign SA6MWA. As
+the name suggests, the concept is to add or subtract in order to encrypt or
+decrypt a text message. The system is designed to be easy to use without any
+electronic equipment, just pen and paper.
 
 ## How
 
@@ -44,53 +123,6 @@ fill up any remaining group as Z will be used as an operator character that
 changes the character table to and from an alternate table. Filling up with Z
 just changes the table back and forth without adding any real characters to the
 output.
-
-## Primary character table
-
-```
-ABCDEFGHIJKLMNOPQRSTUVWXYZ
-Q = Space
-Z = Change to alternate character table
-```
-
-## Alternate character table
-
-```
-0123456789ÅÄÖÆØ.Q?Z+/=,[cl][change-key][change-table]
-ABCDEFGHIJKLMNOPQRSTUVWX   Y           Z
-Z = Change to primary character table
-
-```
-
-```
-NEW IDEA = TRUE MODULO 26, 0 to 25
-
-rule = Z is only to switch between tables, can not be used in either table.
-
-Z = change table
-ZS = Z (Z is position S in the 2nd character table)
-ZRZ = change table, R = space (room), change back to A-Z table
-Padding to fill out 5 letter group = Z (change front to back between character tables)
-
-Zoo = ZSZOO
-Marxzell = MARXZSZELL
-Zebra = ZSZEBRA
-
-Z123 HELLO = ZSBCDRZHELLO = Z123 HELLO
-
-This is a secret text. How are you doing? Take care, bye.
-With ZRZ as "room" character:
-THISZ RZISZ RZAZR ZSECR ETZRZ TEXTZ PRZHO WZRZA REZRZ YOUZR ZDOIN GZQRZ TAKEZ RZCAR EZWZB YEZPZ
-With Q as space/room:
-THISQ ISQAQ SECRE TQTEX TZPZQ HOWQA REQYO UQDOI NGZQZ QTAKE QCARE ZWZQB YEZPZ
-Queens, cobras and zebras.
-ZQZUE ENSZW ZQCOB RASQA NDQZS ZEBRA SZPZZ
-
-UPK31 = UPKZD BZZZZ
-
-UTGÅ MOT UPK79 = UTGZK ZQMOT QUPKZ HJZZZ
-
-```
 
 ## DIANA APPROACH
 
@@ -136,7 +168,6 @@ Xc Xb Xa Xz Xy Xx Xw Xv Xu Xt Xs Xr Xq Xp Xo Xn Xm Xl Xk Xj Xi Xh Xg Xf Xe Xd
 Yb Ya Yz Yy Yx Yw Yv Yu Yt Ys Yr Yq Yp Yo Yn Ym Yl Yk Yj Yi Yh Yg Yf Ye Yd Yc
 Za Zz Zy Zx Zw Zv Zu Zt Zs Zr Zq Zp Zo Zn Zm Zl Zk Zj Zi Zh Zg Zf Ze Zd Zc Zb
 
-
    Message: HELLO WORLD
 Random key: YNQCI CPWZH
 Ciphertext: UIYMD BWMPP
@@ -167,16 +198,13 @@ Unlike with simple modulo 26, a zero-key encryption (key consists of only A)
 does not work, instead each letter has to be coded aaccording to both forward
 and reverse position of the text and we end up with...
 
-```
    Message: HELLO WORLD
        Key: LRDDX HXRDT
 CipherText: HELLO WORLD
 
-```
 
 Another arrangement of the trigraph...
 
-```
   A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
  ----------------------------------------------------
 A A A A A A A A A A A A A A A A A A A A A A A A A A A
@@ -300,36 +328,6 @@ and will never block again - exactly what we want.
 
 Reference: <https://www.2uo.de/myths-about-urandom/>
 
-## Interactive urfave/cli
-
-<https://github.com/codegangsta/hip/blob/master/hip.go#L64-L78>
-```go
-console := cli.NewApp()
-//...
-line, err := readline.String("> ")
-if err == io.EOF {
-	break
-}
-if err != nil {
-	fmt.Println("error: ", err)
-	break
-}
-readline.AddHistory(line)
-console.Run(strings.Fields("cmd " + line))
-```
-
-Combine with <https://github.com/c-bata/go-prompt> or
-<https://github.com/AlecAivazis/survey>. Look at something like the `rancher`
-cli <https://github.com/rancher/cli/blob/master/rancher_prompt/completer.go>
-which uses both `urfave/cli` and `c-bata/go-prompt`.
-
-## Encrypted sqlite3
-
-There are a few options in Go...
-
-* <https://github.com/mutecomm/go-sqlcipher>
-* <https://github.com/CovenantSQL/go-sqlite3-encrypt>
-* <https://github.com/xeodou/go-sqlcipher>
 
 ## Secure key generation
 

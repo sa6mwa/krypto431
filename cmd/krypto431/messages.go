@@ -132,6 +132,7 @@ func messages(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
+		fmt.Println(msg.String())
 		err = k.Save()
 		if err != nil {
 			return err

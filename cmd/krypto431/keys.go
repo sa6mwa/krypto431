@@ -37,7 +37,7 @@ func keys(c *cli.Context) error {
 		return err
 	}
 	vettedKeepers := krypto431.VettedKeepers(o.keepers...)
-	vettedKeys := krypto431.VettedKeys(o.keySlice...)
+	vettedKeys := krypto431.VettedKeys(o.idSlice...)
 	filterFunction := func(key *krypto431.Key) bool {
 		// Next is almost redundant as function selects all keys if no filters av been applied.
 		if o.all {

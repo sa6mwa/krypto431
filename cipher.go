@@ -726,7 +726,6 @@ func (m *Message) Decipher() error {
 			}
 		}
 	}
-	fmt.Println(string(m.PlainText))
 	markKeysUsed = true
 	return nil
 }

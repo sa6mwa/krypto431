@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/jung-kurt/gofpdf"
@@ -91,7 +92,7 @@ func (m *Message) String(width ...int) string {
 	// Messages seemed less complicated to format, but...
 	templateDtgAndKey := `` +
 		`                  ` + LineBreak +
-		`KEY:              ` + LineBreak
+		`ID:               ` + LineBreak
 	templateToFrom := `` +
 		`       TO: ` + LineBreak +
 		`FROM (DE): ` + LineBreak
@@ -120,20 +121,36 @@ func (m *Message) String(width ...int) string {
 	b := blox.New().SetColumnsAndRows(w, 3).Trim()
 	b.DrawSeparator('_').PushPos().PushPos().PutText(templateDtgAndKey).PopPos().
 		MoveX(tDtgKeyLen).PutText(templateToFrom).PopPos().
-		PutText(m.DTG.String() + " " + m.IdString()).
-		MoveX(5).PutText(keyid).
+		PutText(m.DTG.String()).MoveX(4).PutText(m.IdString()).
 		MoveUp().MoveX(tDtgKeyLen + tToFromLen).
 		PutText(recipientsString).
 		PutText(string(m.From))
+
+	output := b.String()
+
 	wrappedPlainText := blox.WrapString(blox.WithoutLineBreaks(string(m.PlainText)), uint(w))
 	g, _ := m.Groups()
 	if g == nil {
 		tmp := make([]rune, 0)
 		g = &tmp
 	}
-	wrappedCipherText := blox.WrapString(blox.WithoutLineBreaks(string(*g)), uint(w))
-	return b.String() + "=CIPHER=" + LineBreak + wrappedCipherText + LineBreak +
-		"=TEXT=" + LineBreak + wrappedPlainText + LineBreak
+	if utf8.RuneCountInString(wrappedPlainText) > 0 {
+		output += "=TEXT=" + LineBreak + wrappedPlainText + LineBreak
+	}
+
+	var groupsPrependedWithKey string
+	if len(*g) > 0 {
+		groupsPrependedWithKey = string(m.KeyId) + " " + string(*g)
+	}
+	wrappedCipherText := blox.WrapString(groupsPrependedWithKey, uint(w))
+	if utf8.RuneCountInString(wrappedCipherText) > 0 {
+		output += "=CIPHER=" + LineBreak + wrappedCipherText + LineBreak
+		groupCount := len(strings.Fields(wrappedCipherText))
+		traffic := blox.WrapString(strings.TrimSpace(fmt.Sprintf("%s DE %s %s %d = %s = K", m.JoinRecipients(" "), string(m.From), m.DTG.String(), groupCount, groupsPrependedWithKey)), uint(w))
+		output += "=TRAFFIC=EXAMPLE=" + LineBreak + traffic + LineBreak
+	}
+
+	return output
 }
 
 // KeysAsText returns a formatted multi-line string with all keys according to
