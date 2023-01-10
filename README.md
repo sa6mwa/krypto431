@@ -58,7 +58,7 @@ Exported 10 keys from /home/sa6mwa/.krypto431.gob to keysToQJ.gob (change PFK/sa
 ### Initialization
 
 Krypto431 uses (per default) an encrypted GOB (Go Binary) file under your home
-folder named `.krypto431.gob`. See `krypto431 -h` and `krypto431 pdf -h` for
+folder named `.krypto431.gob`. See `krypto431 -h` and `krypto431 pfk -h` for
 full information on how to manage these key and message stores.
 
 ```console
