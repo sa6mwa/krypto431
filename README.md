@@ -1,9 +1,30 @@
 # Krypto431
 
-This is a simple OTP (One Time Pad) crypto system called Krypto431 based on the
-DIANA cryptosystem utilizing a reciprocal table. Krypto431 is both a CLI
+Project Krypto431 is a simple OTP (One Time Pad) based on the DIANA cryptosystem
+utilizing a reciprocal table with single-use keys. Krypto431 is both a CLI
 (command-line interface) tool and a traditional pen-and-paper cipher. The tool
 is provided for Linux, BSD-derivatives and Windows.
+
+## Purpose
+
+Krypto431 was designed to ease and facility passing sensitive information over
+any mode of communication, with or without electronic equipment. Although the
+system can be managed without a computer, the tool is an aid to generate,
+manage, and distribute keys to multiple stations and also simplify the message
+exchange (encoding, enciphering, deciphering, and decoding).
+
+Naturally, the intended particular purpose of this type of cipher is to encrypt
+messages in a contested (electronically and otherwise) hostile environment.
+Stations can be fully *within* enemy lines (civilian resistance movement) as
+well as *beyond* enemy lines (armed resistance, remote reconnaissance, etc).
+Another obvious purpose would be to encrypt sensitive information (such as
+casualties, names, addresses for example) during emergency communication.
+
+Although primarily not intended for amateur radio, we are allowed to exchange
+encrypted messages over ham radio within Sweden as long as our call-signs can be
+decoded. This allows us to practice sending and receiving old-style radiogram
+formatted crypto-group messages over telegraphy as well as voice, RTTY or a more
+modern data mode of choice.
 
 ## Status
 
@@ -11,6 +32,16 @@ Current version (v0.1.x) is a **proof-of-concept** and a pre-release to
 demonstrate the idea. Version 0.2 will include (aside from bug-fixes) printable
 instructions how to encipher, decipher, distribute keys, generating a key with
 dice. Support for binary file transfer will be included in v0.3.
+
+## Installation
+
+Binaries are provided in the release tarball (zip) for various operating systems
+and architectures. If you have [Go](https://go.dev) installed, you can download
+and build the CLI tool with this oneliner...
+
+```console
+go install github.com/sa6mwa/krypto431/cmd/krypto431@latest
+```
 
 ## Examples
 
@@ -82,16 +113,15 @@ Saved /home/sa6mwa/.krypto431.gob
 
 ## Case
 
-One may think One-Time-Pad (OTP) ciphers are pretty simple and straight
-forward, but in order to be able to communicate, encrypt and decrypt messages
-you need to agree on a format, consider key distribution and provide clear
-instructions how to use such a system. If there ever is a need to pass
-sensitive information in a short message format over an unsecure channel (for
-example over radio telegraphy or radio telephony), there are no open civilian
-solutions readily available (that I know of). Krypto431 was realized to provide
-a standard and a set of tools for effectively passing encrypted messages that
-can - if necessary - be deciphered (and enciphered) without an electronic or a
-mechanical device.
+One Time Pad (OTP) ciphers are pretty simple and straight forward, but in order
+to be able to communicate, encrypt and decrypt messages you need to agree on a
+format, consider key distribution and provide clear instructions how to use such
+a system. If there ever is a need to pass sensitive information in a short
+message format over an unsecure channel (for example over radio telegraphy or
+radio telephony), there are no open civilian solutions readily available.
+Krypto431 was realized to provide a standard and a set of tools for effectively
+passing encrypted messages that can - if necessary - be deciphered (and
+enciphered) without an electronic or a mechanical device.
 
 431 is the sum of all ascii characters in my amateur radio callsign SA6MWA. As
 the name suggests, the concept is to add or subtract in order to encrypt or

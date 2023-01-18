@@ -13,9 +13,6 @@ armCompile = GOOS=$(1) GOARCH=arm GOARM=$(2) $(build) -o $(NAME)-$(1)-arm$(2) $(
 
 all: build
 
-t: dependencies
-	$(build) -o t $(MODULE)/cmd/test
-
 release: clean dependencies test linux darwin freebsd netbsd openbsd windows
 	sha1sum $(NAME)-*-* $(NAME)-*.exe > $(NAME)-$(VERSION).sha1sum
 	tar --owner=0 --group=0 -czf $(NAME)-$(VERSION).tar.gz --transform 's|^|$(NAME)-$(VERSION)/|' go.* LICENSE AUTHORS VERSION Makefile README.md cmd/ crand/ diana/ fonts/ vendor/ $(NAME)-$(VERSION).sha1sum $(NAME)-*-* $(NAME)-*.exe

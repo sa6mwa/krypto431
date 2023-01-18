@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"math"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 const (
@@ -117,4 +119,59 @@ func testNormalDistribution(t *testing.T, nsamples int, mean, stddev float64) {
 
 func TestStandardNormalValues(t *testing.T) {
 	testNormalDistribution(t, numTestSamples, 0, 1)
+}
+
+func TestIntn(t *testing.T) {
+	// Generate 1000 Intn(26) numbers (used in Krypto431 to generate keys) and
+	// ensure standard deviation is less than 9. Will at least ensure distribution
+	// is somewhat fine.
+	_, sd := sampleIntn26(1000)
+	assert.Less(t, sd, 9.0, "Expected standard deviation to be less than 9")
+	// Generate 100 x 1000 Intn(26) and ensure the standard deviation of all those
+	// deviations are less than 1.1.
+	var standardDeviations []float64
+	for i := 0; i < 100; i++ {
+		_, sd := sampleIntn26(1000)
+		standardDeviations = append(standardDeviations, sd)
+	}
+	_, sdOfSds := standardDeviationFloat64(standardDeviations)
+	assert.Less(t, sdOfSds, 1.1, "Expected standard deviation to be less than 1.1")
+}
+
+func sampleIntn26(permutations int) (mean, sd float64) {
+	m := make(map[int]int)
+	for i := 0; i < permutations; i++ {
+		n := Intn(26)
+		m[n] = m[n] + 1
+	}
+	var nums [26]int
+	for i := range m {
+		nums[i] = m[i]
+	}
+	mean, sd = standardDeviationInt(nums[:])
+	return
+}
+
+// Returns mean and standard deviation of sample of ints.
+func standardDeviationInt(samples []int) (mean, sd float64) {
+	var sum, squaresum float64
+	for _, s := range samples {
+		sum += float64(s)
+		squaresum += float64(s) * float64(s)
+	}
+	mean = sum / float64(len(samples))
+	sd = math.Sqrt(squaresum/float64(len(samples)) - mean*mean)
+	return
+}
+
+// Returns mean and standard deviation of sample of float64s.
+func standardDeviationFloat64(samples []float64) (mean, sd float64) {
+	var sum, squaresum float64
+	for _, s := range samples {
+		sum += s
+		squaresum += s * s
+	}
+	mean = sum / float64(len(samples))
+	sd = math.Sqrt(squaresum/float64(len(samples)) - mean*mean)
+	return
 }
