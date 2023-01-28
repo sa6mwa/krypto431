@@ -42,9 +42,6 @@ github.com/sa6mwa/blox
 # github.com/sa6mwa/dtg v0.1.0
 ## explicit; go 1.19
 github.com/sa6mwa/dtg
-# github.com/seehuhn/mt19937 v1.0.0
-## explicit; go 1.15
-github.com/seehuhn/mt19937
 # github.com/stretchr/testify v1.8.1
 ## explicit; go 1.13
 github.com/stretchr/testify/assert

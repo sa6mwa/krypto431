@@ -8,7 +8,6 @@ require (
 	github.com/nknorg/encrypted-stream v1.0.1
 	github.com/sa6mwa/blox v0.1.4
 	github.com/sa6mwa/dtg v0.1.0
-	github.com/seehuhn/mt19937 v1.0.0
 	github.com/stretchr/testify v1.8.1
 	github.com/urfave/cli/v2 v2.23.6
 	github.com/wagslane/go-password-validator v0.3.0
