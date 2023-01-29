@@ -7,9 +7,9 @@ require (
 	github.com/jung-kurt/gofpdf v1.16.2
 	github.com/nknorg/encrypted-stream v1.0.1
 	github.com/sa6mwa/blox v0.1.4
-	github.com/sa6mwa/dtg v0.1.0
+	github.com/sa6mwa/dtg v0.1.1
 	github.com/stretchr/testify v1.8.1
-	github.com/urfave/cli/v2 v2.23.6
+	github.com/urfave/cli/v2 v2.24.1
 	github.com/wagslane/go-password-validator v0.3.0
 	golang.org/x/crypto v0.5.0
 	golang.org/x/term v0.4.0

@@ -5,3 +5,6 @@
 TEST.PNG
 /t
 /krypto431
+/krypto431-*-*
+/krypto431*.sha1sum
+*.tar.gz

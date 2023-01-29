@@ -431,7 +431,7 @@ func (t *Message) Decode() error {
 func (r *Krypto431) FindKey(recipients ...[]rune) *Key {
 	numberOfRecipients := len(recipients)
 	for i := range r.Keys {
-		if r.Keys[i].Used {
+		if r.Keys[i].Used || r.Keys[i].Compromised {
 			continue
 		}
 		if len(r.Keys[i].Id) != r.GroupSize {
@@ -474,6 +474,19 @@ func (r *Krypto431) MarkKeyUsed(keyId []rune, used bool) error {
 	for i := range r.Keys {
 		if k == string(r.Keys[i].Id) {
 			r.Keys[i].Used = used
+			return nil
+		}
+	}
+	return fmt.Errorf("key %s not found", k)
+}
+
+// MarkKeyCompromised() looks for the keyId among the instance's Keys and sets the Compromised
+// property to true or false depending on what the "compromised" variable is set to.
+func (r *Krypto431) MarkKeyCompromised(keyId []rune, compromised bool) error {
+	k := strings.ToUpper(strings.TrimSpace(string(keyId)))
+	for i := range r.Keys {
+		if k == string(r.Keys[i].Id) {
+			r.Keys[i].Compromised = compromised
 			return nil
 		}
 	}
@@ -643,19 +656,12 @@ func (m *Message) Encipher() error {
 			m.CipherText = append(m.CipherText, output)
 		}
 	}
-	// DEBUG: remove print-outs below...
-	// for i := range chunks {
-	// 	grouped, err := groups(&chunks[i].encodedText, m.instance.GroupSize, 0)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	fmt.Printf("key: %s, enctxt: %s"+LineBreak, string(chunks[i].key.Id), string(*grouped))
-	// }
-	// grouped, err := groups(&m.CipherText, m.instance.GroupSize, 0)
-	// if err != nil {
-	// 	return err
-	// }
-	// fmt.Printf("        ciphertext: %s"+LineBreak, string(*grouped))
+	// If we end-up here, PlainText has been enciphered into CipherText successfully.
+	// Issue #10: Delete all keys used, but do not wipe PlainText.
+	for i := range chunks {
+		chunks[i].key.Delete()
+	}
+	chunk.key.Delete()
 	releaseKeys = false
 	return nil
 }
@@ -686,6 +692,8 @@ func (m *Message) Decipher() error {
 		if markKeysUsed {
 			for i := range keyStack {
 				keyStack[i].Used = true
+				// Issue #10: Delete key after Encipher... but also after Decipher...
+				keyStack[i].Delete()
 			}
 		}
 	}()
@@ -699,7 +707,6 @@ func (m *Message) Decipher() error {
 	for i := range m.CipherText {
 		var encodedChar rune
 		if keyIndexCounter >= len(keyPtr.Runes) {
-			//fmt.Fprintf(os.Stderr, "%d (keylen=%d)\n", keyIndexCounter, len(keyPtr.Runes))
 			return fmt.Errorf("out-of-key error, %s is too short", string(keyPtr.Id))
 		}
 		err := diana.TrigraphRune(&encodedChar, &keyPtr.Runes[keyIndexCounter], &m.CipherText[i])

@@ -1,6 +1,6 @@
 # Date Time Group parser
 
-Go module (with package `dtg`) for parsing and printing `time.Time` in Allied
+Go module (package `dtg`) for parsing and printing `time.Time` in Allied
 Communication Publication (ACP) 121 NATO Date Time Group (DTG) format.
 
 ## Usage

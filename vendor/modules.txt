@@ -39,13 +39,13 @@ github.com/russross/blackfriday/v2
 # github.com/sa6mwa/blox v0.1.4
 ## explicit; go 1.19
 github.com/sa6mwa/blox
-# github.com/sa6mwa/dtg v0.1.0
+# github.com/sa6mwa/dtg v0.1.1
 ## explicit; go 1.19
 github.com/sa6mwa/dtg
 # github.com/stretchr/testify v1.8.1
 ## explicit; go 1.13
 github.com/stretchr/testify/assert
-# github.com/urfave/cli/v2 v2.23.6
+# github.com/urfave/cli/v2 v2.24.1
 ## explicit; go 1.18
 github.com/urfave/cli/v2
 # github.com/wagslane/go-password-validator v0.3.0

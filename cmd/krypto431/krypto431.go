@@ -10,7 +10,6 @@ import (
 )
 
 var (
-	version                  string
 	ErrAssertion             error = errors.New("assertion error")
 	ErrMissingImportFilename error = errors.New("filename to import keys from is missing")
 	ErrMissingExportFilename error = errors.New("filename to export keys to is missing")
@@ -43,7 +42,7 @@ KRYPTO431 is dedicated to the memory of Maximilian Kolbe (SP3RN).
 
 	app := &cli.App{
 		Name:      "krypto431",
-		Version:   version,
+		Version:   krypto431.Version,
 		Usage:     "CADCRYS (The Computer-Aided DIANA Cryptosystem)",
 		Copyright: "(C) 2021-2023 Michel Blomgren, https://github.com/sa6mwa/krypto431",
 		Authors: []*cli.Author{

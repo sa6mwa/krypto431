@@ -1,21 +1,41 @@
 NAME = krypto431
 MODULE = github.com/sa6mwa/krypto431
-VERSION = $(shell (git describe --tags --abbrev=0 2>/dev/null || echo -n v0.0.0) | xargs echo -n | tee VERSION | sed 's/^v//')
+VF = VERSION
+SEMVEREIS = github.com/sa6mwa/semvereis@v0.1.2
+NEXTMINOR = go run $(SEMVEREIS) next minor -nd v0.0.0
+NEXTMINORTAG = go run $(SEMVEREIS) next minor -vnd v0.0.0
+NEXTPATCH = go run $(SEMVEREIS) next patch -nd v0.0.0
+NEXTPATCHTAG = go run $(SEMVEREIS) next patch -vnd v0.0.0
 DESTDIR = /usr/local/bin
 SRC = $(MODULE)/cmd/$(NAME)
 GO = CGO_ENABLED=0 go
-build = $(GO) build -v -ldflags '-s -X main.version=$(VERSION)'
+build = $(GO) build -v -ldflags=-s
 crossCompile = GOOS=$(1) GOARCH=$(2) $(build) -o $(NAME)-$(1)-$(2) $(SRC)
 crossCompileWindows = GOOS=windows GOARCH=$(1) $(build) -o $(NAME)-$(1).exe $(SRC)
 armCompile = GOOS=$(1) GOARCH=arm GOARM=$(2) $(build) -o $(NAME)-$(1)-arm$(2) $(SRC)
+sha = sha1sum $(NAME)-*-* $(NAME)-*.exe > $(NAME)-$(1).sha1sum
+tar = tar --owner=0 --group=0 -czf $(NAME)-$(1).tar.gz --transform 's|^|$(NAME)-$(1)/|' *.go LICENSE AUTHORS VERSION Makefile README.md cmd/ crand/ diana/ fonts/ vendor/ $(NAME)-$(1).sha1sum $(NAME)-*-* $(NAME)-*.exe
+tagmsg = @echo "Commit, tag and push when done: git commit -a ; git tag $(1) ; git push origin $(1)"
 
-.PHONY: all release install clean build dependencies test amd64 arm64 386 arm% %bsd darwin linux
+.PHONY: all release releaseMinor releasePatch upgrade install clean build dependencies test amd64 arm64 386 arm% %bsd darwin linux
 
 all: build
 
-release: clean dependencies test linux darwin freebsd netbsd openbsd windows
-	sha1sum $(NAME)-*-* $(NAME)-*.exe > $(NAME)-$(VERSION).sha1sum
-	tar --owner=0 --group=0 -czf $(NAME)-$(VERSION).tar.gz --transform 's|^|$(NAME)-$(VERSION)/|' go.* LICENSE AUTHORS VERSION Makefile README.md cmd/ crand/ diana/ fonts/ vendor/ $(NAME)-$(VERSION).sha1sum $(NAME)-*-* $(NAME)-*.exe
+release: releaseMinor
+
+releaseMinor:
+	$(NEXTMINOR) -so $(VF)
+	$(MAKE) clean dependencies test linux darwin freebsd netbsd openbsd windows
+	$(call sha,$(shell $(NEXTMINOR)))
+	$(call tar,$(shell $(NEXTMINOR)))
+	$(call tagmsg,$(shell $(NEXTMINORTAG)))
+
+releasePatch:
+	$(NEXTPATCH) -so $(VF)
+	$(MAKE) clean dependencies test linux darwin freebsd netbsd openbsd windows
+	$(call sha,$(shell $(NEXTPATCH)))
+	$(call tar,$(shell $(NEXTPATCH)))
+	$(call tagmsg,$(shell $(NEXTPATCHTAG)))
 
 install:
 	@if [ `id -u` -ne 0 ]; then echo "You may need to sudo to install $(NAME)." ; fi
@@ -23,7 +43,7 @@ install:
 
 clean:
 	for f in $(NAME) $(NAME)-*-* $(NAME)-*.exe ; do if test -x $$f ; then rm -f $$f ; fi; done
-	rm -f $(NAME)-$(VERSION).tar.gz $(NAME)-$(VERSION).sha1sum
+	rm -f $(NAME)-*.tar.gz $(NAME)-*.sha1sum
 
 build: dependencies test $(NAME)
 
@@ -33,9 +53,17 @@ dependencies:
 test:
 	$(GO) test -cover ./...
 
+$(VF):
+	git describe --tags --abbrev=0 | sed 's/^v//' > $(VF)
+
 go.mod:
 	go mod init $(MODULE)
-	go mod tidy
+	go mod tidy -v
+
+upgrade: go.mod
+	go get -v -u all
+	go mod tidy -v
+	go mod vendor -v
 
 linux: amd64 arm64 arm6 arm7 386
 

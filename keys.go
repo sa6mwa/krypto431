@@ -1,6 +1,7 @@
 package krypto431
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -77,7 +78,7 @@ func (k *Krypto431) NewKey(expire time.Time, keepers ...string) *Key {
 	return &key
 }
 
-// DeleteKey removes one or more keys from the instance's Keys slice wiping the
+// Krypto431_DeleteKey removes one or more keys from the instance's Keys slice wiping the
 // key before deleting it. Returns number of keys deleted or error on failure.
 func (k *Krypto431) DeleteKey(keyIds ...[]rune) (int, error) {
 	// TODO: error-handling is a future improvement.
@@ -97,6 +98,24 @@ func (k *Krypto431) DeleteKey(keyIds ...[]rune) (int, error) {
 		}
 	}
 	return deleted, nil
+}
+
+// Key_Delete wipes and deletes itself from the instance's keys slice.
+func (k *Key) Delete() error {
+	deleted := false
+	for i := range k.instance.Keys {
+		if EqualRunesFold(&k.instance.Keys[i].Id, &k.Id) {
+			k.instance.Keys[i].Wipe()
+			k.instance.Keys[i] = k.instance.Keys[len(k.instance.Keys)-1]
+			k.instance.Keys = k.instance.Keys[:len(k.instance.Keys)-1]
+			deleted = true
+			break
+		}
+	}
+	if !deleted {
+		return errors.New("key not found: unable to delete key")
+	}
+	return nil
 }
 
 // DeleteKeyByString is an alias for DeleteKey where key IDs are issued as

@@ -1,3 +1,24 @@
+// The dtg package parses and prints time.Time in Allied Communication
+// Publication (ACP) 121 Date-Time Group (DTG) format. This package is Copyright
+// (C) 2022 SA6MWA Michel Blomgren.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 package dtg
 
 // github.com/sa6mwa/dtg Copyright (C) 2022 SA6MWA Michel Blomgren.
@@ -15,7 +36,7 @@ import (
 )
 
 var (
-	DtgRegexp                *regexp.Regexp = regexp.MustCompile(`^([0-9]{2})([0-9]{2})([0-9]{2})([A-Z]{0,1})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC){0,1}([0-9]{2}){0,1}$`)
+	DtgRegexp                *regexp.Regexp = regexp.MustCompile(`^([0-9]{2})([0-9]{2})([0-9]{2})([A-Z]{0,1})(JAN|FEB|MAR|APR|MAY|MAJ|JUN|JUL|AUG|SEP|OCT|OKT|NOV|DEC){0,1}([0-9]{2}){0,1}$`)
 	ErrInvalidDTG            error          = errors.New("invalid DTG format (minimally ddHHMM to complete ddHHMMZmmmYY)")
 	ErrInvalidTimeZoneLetter error          = errors.New("invalid time zone letter")
 	ErrInvalidDtgVariadic    error          = errors.New("invalid DTG slice passed as variadic")
